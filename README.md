@@ -75,7 +75,8 @@ The joint uses the current connector of its table. The status bar shows both cur
    Push **Ctrl** again to set copy off. The cursor shows a **+** when copy is on. Copy goes off after each move.
 6. To change the joint:
    - **Left / Right**: change the joint to the previous / next connector of its table. The tool selects the turns again.
-   - **Alt + arrow**: turn the edge component 90° (both edge components of a 3-panel joint).
+   - **Alt + arrow**: turn the edge component 90°. In a 3-panel joint, each push turns one edge component, in turn:
+     first, second, first, second. With two possible turns (for example minifix), four pushes bring the joint back.
    - **Shift + arrow**: turn the face component 90°.
 7. To erase the joint, push **Delete** or right-click **Erase joint**.
 8. Push **Esc** to exit the tool. Click an empty area to clear the selection.

@@ -10,7 +10,8 @@ module OclJoints
   #         (connector of the 3-panel table)
   #     the new joint is in the middle of the contact and becomes the selected joint
   # Arrow keys on the selected joint: Left / Right other connector of its table, Alt + arrows turn
-  # the edge components, Shift + arrows turn the face component. Without a selected joint
+  # the edge component (3-panel joint: the two edge components in turn, first, second, first, ...),
+  # Shift + arrows turn the face component. Without a selected joint
   # Left / Right select the 2-panel connector, Up / Down the 3-panel connector.
   class JointTool
 
@@ -138,7 +139,13 @@ module OclJoints
         if @selected && @first.nil?
           kind = _kind(@selected)
           rows = _rows(kind)
-          if @alt
+          if @alt && @selected.triple?
+            # the two edge components in turn: count the Alt + arrow pushes on this joint
+            @edge_turns = 0 unless @edge_turns_id == @selected.id
+            _change_selected(edge_step: step, edge: @edge_turns.even? ? :edge : :edge2)
+            @edge_turns += 1
+            @edge_turns_id = @selected.id
+          elsif @alt
             _change_selected(edge_step: step)
           elsif @shift
             _change_selected(face_step: step)
@@ -549,7 +556,8 @@ module OclJoints
     # Replaces the components of the selected joint (same pair id and position):
     #   row_index:  other connector of its table, turns predicted as for a new joint
     #   edge_step / face_step: next allowed turn of the edge components / the face component
-    def _change_selected(row_index: nil, edge_step: nil, face_step: nil)
+    #   edge: for a 3-panel joint, the edge component edge_step turns (:edge or :edge2; nil: both)
+    def _change_selected(row_index: nil, edge_step: nil, face_step: nil, edge: nil)
       pair = @selected
       kind = _kind(pair)
       contact = Joint.contact(pair.edge.panel.box, pair.face.panel.box)
@@ -581,11 +589,11 @@ module OclJoints
       if row_index.nil?
         ke = Scene.turn(pair.edge, frames[:edge])
         kf = Scene.turn(pair.face, frames[:face])
-        ke = Joint.next_option(prediction[:edge_options], ke, edge_step) if edge_step
+        ke = Joint.next_option(prediction[:edge_options], ke, edge_step) if edge_step && edge != :edge2
         kf = Joint.next_option(prediction[:face_options], kf, face_step) if face_step
         if pair.triple?
           ke2 = Scene.turn(pair.edge2, Joint.frames(contact2)[:edge])
-          ke2 = Joint.next_option(prediction2[:edge_options], ke2, edge_step) if edge_step
+          ke2 = Joint.next_option(prediction2[:edge_options], ke2, edge_step) if edge_step && edge != :edge
         end
       end
 
