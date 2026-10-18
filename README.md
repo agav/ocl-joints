@@ -32,7 +32,13 @@ For development, copy `tools/dev_loader.rb` into the SketchUp `Plugins` folder. 
    - **Up / Down**: turn the face component 90°.
 6. Push **Enter** or click to add the components. Push **Esc** to cancel.
 
-To select the connector, push **1**–**9** (row of the table) or right-click.
+To select the connector:
+
+- Push **Tab** for the next row of the table. Push **Shift+Tab** for the previous row.
+- Push **1**–**9** for rows 1–9.
+- Right-click and select the row.
+
+If the pairs show, the tool changes them to the new connector immediately.
 
 ### Position
 
@@ -67,7 +73,7 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 
 ## Edit joints
 
-1. Click **Edit joints**, or push **Tab** in the tool.
+1. Click **Edit joints**, or right-click in the tool and select **Edit mode**. Push **Tab** to go back to place mode.
 2. Move the cursor over a placed component. The tool highlights the pair.
 3. Click to select the pair.
 4. Drag to move the pair along the edge. The pair snaps to guide-line crossings and to the edge middle.

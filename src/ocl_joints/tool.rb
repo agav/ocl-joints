@@ -4,7 +4,7 @@ module OclJoints
   #   place mode: select a panel, then a connected panel; the tool shows the component pairs,
   #               arrows turn them, Enter or click adds them.
   #   edit mode:  select a placed pair, drag it along the edge or type a distance, Delete erases it.
-  # Tab changes the mode.
+  # In place mode Tab / Shift+Tab select the next / previous connector; in edit mode Tab returns to place mode.
   class JointTool
 
     # Same colors as OpenCutList's part highlight
@@ -107,8 +107,13 @@ module OclJoints
     def onKeyDown(key, repeat, flags, view)
       handled = true
       rows = OclJoints.config[:rows]
-      if key == KEY_TAB
-        @mode = @mode == :place ? :edit : :place
+      if key == VK_SHIFT
+        @shift = true
+        handled = false
+      elsif key == KEY_TAB && @mode == :place
+        _select_row((_row_index + (@shift ? -1 : 1)) % rows.length) unless rows.empty?
+      elsif key == KEY_TAB
+        @mode = :place
         _reset
       elsif (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
         _select_row((key - 1) % 48 % 9)
@@ -126,6 +131,11 @@ module OclJoints
         view.invalidate
       end
       handled
+    end
+
+    def onKeyUp(key, repeat, flags, view)
+      @shift = false if key == VK_SHIFT
+      false
     end
 
     def onUserText(text, view)
@@ -157,7 +167,7 @@ module OclJoints
       if @mode == :edit && @selected
         menu.add_item('Erase pair') { _erase; _status; view.invalidate }
       end
-      menu.add_item(@mode == :place ? 'Edit mode (Tab)' : 'Place mode (Tab)') do
+      menu.add_item(@mode == :place ? 'Edit mode' : 'Place mode (Tab)') do
         @mode = @mode == :place ? :edit : :place
         _reset
         _status
@@ -434,11 +444,11 @@ module OclJoints
       connector = row ? "Connector #{_row_index + 1}: #{row[:name]}." : 'No connectors.'
       text = if @mode == :place
                if @preview
-                 "#{@preview[:points].length} pair(s). Left/Right: turn edge part. Up/Down: turn face part. Enter or click: add. Esc: cancel."
+                 "#{@preview[:points].length} pair(s). Tab: next connector. Left/Right: turn edge part. Up/Down: turn face part. Enter or click: add. Esc: cancel."
                elsif @first
-                 "Select a connected panel (#{@candidates.length} found). Esc: cancel."
+                 "Select a connected panel (#{@candidates.length} found). Tab: next connector. Esc: cancel."
                else
-                 'Select a panel. Keys 1-9: connector. Tab: edit mode.'
+                 'Select a panel. Tab / Shift+Tab or keys 1-9: connector.'
                end
              elsif @selected
                'Drag: move along the edge. Type a distance from the nearest end. Delete: erase. Tab: place mode.'
