@@ -1,6 +1,6 @@
 # OCL Joints
 
-SketchUp extension. It places pairs of surface components (minifix, confirmat, dowels) where two panels connect.
+SketchUp extension. It places surface components (minifix, confirmat, dowels) where two or three panels connect.
 It is a companion of [OpenCutList](https://github.com/lairdubois/lairdubois-opencutlist-sketchup-extension)
 and [ocl-viyar](https://github.com/agav/ocl-viyar): ocl-viyar exports the placed `f_` components as drillings.
 
@@ -25,43 +25,65 @@ For development, copy `tools/dev_loader.rb` into the SketchUp `Plugins` folder. 
 
 Click **Joints** (toolbar or **Extensions > OCL Joints**). The tool has one mode.
 
-### Add a pair
+### Add a joint
 
 1. Hold **Alt**. The tool highlights the panel under the cursor.
 2. Click a panel. The tool highlights all panels that connect to it.
 3. Click one of the connected panels.
-4. The tool adds one pair in the middle of the contact and selects it. You can move, turn or erase it immediately.
+4. Then do one of these:
+   - **2-panel joint**: release **Alt**. The tool adds the joint.
+   - **3-panel joint**: click a third panel. The tool highlights only the panels that are possible.
+     The tool adds the joint immediately.
+5. The tool selects the new joint. You can move, turn or erase it immediately.
 
-If you release **Alt** before you click the second panel, the tool clears the panels and you can select a pair again.
+If you release **Alt** when only one panel is selected, the tool clears the panel and you can select a joint again.
 
-The pair uses the current connector. To change the connector before you add a pair, push **Left / Right** or right-click.
-The status bar shows the current connector.
+A joint goes on the **edge middle line**: the line at half the thickness of the edge panel, in the contact plane.
+The tool uses only the length where the panels touch. The tool puts the joint in the middle of this length.
 
-The pair goes on the **edge middle line**: the line at half the thickness of the edge panel, in the contact plane.
-The tool uses only the length where the panels touch.
+#### 3-panel joint
 
-### Select and change a pair
+A 3-panel joint connects a central panel and two edge panels, one on each face of the central panel.
+Example: a metal cylinder in a through hole of a partition, with an eccentric connector in each shelf.
 
-1. Move the cursor over a placed component. The tool highlights the pair.
-2. Click to select the pair.
-3. Drag to move the pair along the edge.
-   - The pair snaps to points, as in the SketchUp Move tool: ends, midpoints, intersections, guide points.
-     The tool puts the pair where the point is on the edge line (a dashed line shows it).
-   - Without a point, the pair snaps to guide-line crossings and to the edge middle.
+- The first two panels must be one edge panel and the central panel (in any order).
+- The third panel must touch the other face of the central panel with its edge.
+- The middle lines of the two edge panels must be on one axis (0.5 mm tolerance). Example: a 16 mm shelf and an 18 mm
+  shelf at the same bottom height are not on one axis.
+- The joint uses only the length where all three panels touch.
+- The face component goes on the face to the first edge panel. It must be a through hole (for example `f_d10xF`).
+- Each edge panel gets the edge component. The tool turns each one to the inner side of its own contact.
+
+#### Connector
+
+The joint uses the current connector of its table. The status bar shows both current connectors.
+
+- **Left / Right**: select the 2-panel connector.
+- **Up / Down**: select the 3-panel connector.
+- Right-click: select a connector from the list.
+
+### Select and change a joint
+
+1. Move the cursor over a placed component. The tool highlights the joint.
+2. Click to select the joint.
+3. Drag to move the joint along the edge.
+   - The joint snaps to points, as in the SketchUp Move tool: ends, midpoints, intersections, guide points.
+     The tool puts the joint where the point is on the edge line (a dashed line shows it).
+   - Without a point, the joint snaps to guide-line crossings and to the edge middle.
 4. To set an exact position, type a distance. The distance is from the nearest end of the contact.
-5. To copy the pair, push **Ctrl** one time (copy on), then drag or type a distance. The original pair stays.
+5. To copy the joint, push **Ctrl** one time (copy on), then drag or type a distance. The original pair stays.
    Push **Ctrl** again to set copy off. The cursor shows a **+** when copy is on. Copy goes off after each move.
-6. To change the pair:
-   - **Left / Right**: change the pair to the previous / next connector of the table. The tool selects the turns again.
-   - **Alt + arrow**: turn the edge component 90°.
+6. To change the joint:
+   - **Left / Right**: change the joint to the previous / next connector of its table. The tool selects the turns again.
+   - **Alt + arrow**: turn the edge component 90° (both edge components of a 3-panel joint).
    - **Shift + arrow**: turn the face component 90°.
-7. To erase the pair, push **Delete** or right-click **Erase pair**.
+7. To erase the joint, push **Delete** or right-click **Erase joint**.
 8. Push **Esc** to exit the tool. Click an empty area to clear the selection.
 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
-The tool uses them to find the other component of the pair.
+A 3-panel joint also has `kind` = `triple`. The tool uses the attributes to find the other components of the joint.
 
-You can also edit components that you placed by hand. The tool finds a pair if:
+You can also edit 2-panel joints that you placed by hand. The tool finds a pair if:
 
 - Both components are directly in the panels (not inside other groups), and their names start with `f_` or `g_`.
 - The two panels connect (edge to face).
@@ -94,13 +116,15 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 
 ### Cursor
 
-- Select a pair: arrow with a bolt.
+- Select a joint: arrow with a bolt.
 - Copy on: the same, with an orange **+**.
 - Alt held (select panels): arrow with a bolt and a yellow panel corner.
 
 ## Settings
 
-**Extensions > OCL Joints > Settings...** opens the connector table:
+**Extensions > OCL Joints > Settings...** opens the connector tables.
+
+**2-panel connectors:**
 
 | Name | Face component | Edge component |
 |---|---|---|
@@ -111,9 +135,12 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 
 These defaults are the pairs of `lm.skp`.
 
+**3-panel connectors:** Name, Face component (through hole in the central panel), Edge component (for both edge panels).
+This table is empty at the start.
+
 - The tool uses the component definition of the model.
 - If the model does not have it, the tool loads `<name>.skp` from a library folder (subfolders too).
-- The table is saved in `%APPDATA%\ocl_joints\config.json`. **Import** and **Export** copy it to and from a JSON file.
+- The tables are saved in `%APPDATA%\ocl_joints\config.json`. **Import** and **Export** copy it to and from a JSON file.
 
 ### Component rules
 

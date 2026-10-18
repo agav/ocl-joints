@@ -13,7 +13,8 @@ class TestConfig < Minitest::Test
 
   def test_round_trip
     config = { library: [ 'C:/prj/skp/components' ],
-               rows: [ { name: 'minifix', face: 'f_d5x11.5', edge: 'g_minifix-edge', learned: { edge: 2, face: 0 } } ] }
+               rows: [ { name: 'minifix', face: 'f_d5x11.5', edge: 'g_minifix-edge', learned: { edge: 2, face: 0 } } ],
+               triples: [ { name: 'double', face: 'f_d10xF', edge: 'g_minifix-edge' } ] }
     assert_equal config, C.parse(C.dump(config))
   end
 

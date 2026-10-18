@@ -119,6 +119,28 @@ class TestJoint < Minitest::Test
     assert_equal [ 2, 1 ], [ r[:edge], r[:face] ]
   end
 
+  # Partition x 300..318 between a left shelf (x 18..300) and a right shelf (x 318..582)
+  def partition = G::Box.new(mm(300, 0, 0), [ Y, Z, X ], mm(500, 720, 18))
+  def left_shelf(z = 300, y0 = 0, len = 500) = G::Box.new(mm(18, y0, z), [ X, Y, Z ], mm(282, len, 18))
+  def right_shelf(z = 300, y0 = 0, len = 500, t = 18) = G::Box.new(mm(318, y0, z), [ X, Y, Z ], mm(264, len, t))
+
+  def test_third_panel_on_the_same_axis
+    first = G.contact(left_shelf, partition)
+    c, segment = G.third(first, right_shelf(300, 100, 300), partition)
+    assert_vec X, c.normal   # the other face of the partition points to the second shelf
+    assert_vec mm(100, 400), segment
+    point = G.joint_point(first, segment.sum / 2)
+    assert_vec mm(318, 250, 309), G.opposite_point(c, point)
+  end
+
+  def test_third_panel_rejected
+    first = G.contact(left_shelf, partition)
+    assert_nil G.third(first, right_shelf(310), partition)               # other height: not on one axis
+    assert_nil G.third(first, right_shelf(300, 0, 500, 16), partition)   # 16 mm: middle 1 mm lower
+    assert_nil G.third(first, left_shelf(300), partition)                # same side
+    assert_nil G.third(first, right_shelf(300, 0, 500).tap { |b| b.origin = mm(318, 0, 600) }, partition)
+  end
+
   def test_next_option
     assert_equal 2, G.next_option([ 0, 2 ], 0, 1)
     assert_equal 0, G.next_option([ 0, 2 ], 2, 1)

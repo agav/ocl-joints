@@ -2,12 +2,14 @@ require 'json'
 
 module OclJoints
 
-  # Connector table and library folders. Pure Ruby; main.rb keeps the JSON in the SketchUp user settings.
+  # Connector tables and library folders. Pure Ruby; main.rb keeps the JSON in %APPDATA%.
   #
   # { "library": [ "C:/folder", ... ],
   #   "rows": [ { "name": "minifix", "face": "f_d5x11.5", "edge": "g_minifix-edge",
-  #               "learned": { "edge": 0, "face": 0 } }, ... ] }
-  # "learned" holds the turns (0..3, 90 degrees each) of the last placed pair; it is optional.
+  #               "learned": { "edge": 0, "face": 0 } }, ... ],
+  #   "triples": [ { "name": "...", "face": "<through hole>", "edge": "<both edge panels>" }, ... ] }
+  # rows are 2-panel connectors, triples 3-panel connectors (one through hole in the central panel).
+  # "learned" holds the turns (0..3, 90 degrees each) of the last turned joint; it is optional.
   module Config
 
     # Connector pairs used in lm.skp
@@ -21,7 +23,7 @@ module OclJoints
     module_function
 
     def default
-      { library: [], rows: DEFAULT_ROWS.map(&:dup) }
+      { library: [], rows: DEFAULT_ROWS.map(&:dup), triples: [] }
     end
 
     # Parses and cleans a JSON string; returns the default for nil or invalid JSON
@@ -39,7 +41,11 @@ module OclJoints
     def normalize(data)
       data = {} unless data.is_a?(Hash)
       library = Array(data[:library]).map { |f| f.to_s.strip }.reject(&:empty?)
-      rows = Array(data[:rows]).filter_map do |r|
+      { library: library, rows: _rows(data[:rows]), triples: _rows(data[:triples]) }
+    end
+
+    def _rows(list)
+      Array(list).filter_map do |r|
         next unless r.is_a?(Hash)
         row = { name: r[:name].to_s.strip, face: r[:face].to_s.strip, edge: r[:edge].to_s.strip }
         next if row[:face].empty? && row[:edge].empty?
@@ -50,7 +56,6 @@ module OclJoints
         end
         row
       end
-      { library: library, rows: rows }
     end
 
   end

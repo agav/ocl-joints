@@ -21,13 +21,14 @@ module OclJoints
     File.write(CONFIG_FILE, Config.dump(@config), encoding: 'UTF-8')
   end
 
-  # Current connector row, kept between tool runs in this SketchUp session
-  def self.row_index
-    @row_index || 0
+  # Current connector rows (kind :rows = 2-panel table, :triples = 3-panel table), kept between
+  # tool runs in this SketchUp session
+  def self.index(kind)
+    (@indexes ||= {})[kind] || 0
   end
 
-  def self.row_index=(i)
-    @row_index = i
+  def self.set_index(kind, i)
+    (@indexes ||= {})[kind] = i
   end
 
   def self.start_tool
@@ -37,7 +38,7 @@ module OclJoints
   def self.show_settings
     @dialog&.close
     @dialog = UI::HtmlDialog.new(dialog_title: 'OCL Joints: connectors', preferences_key: 'OclJointsSettings',
-                                 width: 760, height: 520, style: UI::HtmlDialog::STYLE_DIALOG)
+                                 width: 760, height: 680, style: UI::HtmlDialog::STYLE_DIALOG)
     @dialog.set_file(File.join(PLUGIN_ROOT, 'settings.html'))
     send = lambda do |config|
       defs = Sketchup.active_model.definitions.reject { |d| d.group? || d.image? }

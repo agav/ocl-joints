@@ -23,7 +23,12 @@ module OclJoints
       def transformation = panel.transformation * instance.transformation
     end
 
-    Pair = Struct.new(:id, :row, :edge, :face)
+    # A joint: edge and face components; a 3-panel joint also has edge2, the edge component of the
+    # panel on the other face of the central (face) panel. edge is on the face component side.
+    Pair = Struct.new(:id, :row, :edge, :face, :edge2) do
+      def parts = [ edge, face, edge2 ].compact
+      def triple? = !edge2.nil?
+    end
 
     module_function
 
@@ -195,7 +200,7 @@ module OclJoints
     end
 
     # Adds a component into the panel definition at a world transformation
-    def add(panel, definition, world, pair_id, role, row, turn = nil)
+    def add(panel, definition, world, pair_id, role, row, turn = nil, triple: false)
       local = panel.transformation.inverse * world
       # in a mirrored panel the local transformation is mirrored too: mirror the component back
       # along its X axis (the edge line), so it keeps a normal transformation
@@ -205,6 +210,7 @@ module OclJoints
       instance.set_attribute(DICTIONARY, 'role', role)
       instance.set_attribute(DICTIONARY, 'row', row)
       instance.set_attribute(DICTIONARY, 'turn', turn) if turn
+      instance.set_attribute(DICTIONARY, 'kind', 'triple') if triple
       _glue(instance)
       instance
     end
@@ -249,8 +255,10 @@ module OclJoints
       instance.set_attribute(DICTIONARY, 'role', old.get_attribute(DICTIONARY, 'role'))
       row = old.get_attribute(DICTIONARY, 'row')
       instance.set_attribute(DICTIONARY, 'row', row) if row
-      turn = old.get_attribute(DICTIONARY, 'turn')
-      instance.set_attribute(DICTIONARY, 'turn', turn) if turn
+      %w[turn kind].each do |key|
+        value = old.get_attribute(DICTIONARY, key)
+        instance.set_attribute(DICTIONARY, key, value) if value
+      end
       _glue(instance)
       Part.new(part.panel, instance)
     end
@@ -258,30 +266,43 @@ module OclJoints
     # Copy of a pair at the same place
     def duplicate_pair(pair)
       id = new_pair_id
-      Pair.new(id, pair.row, duplicate(pair.edge, id), duplicate(pair.face, id))
+      Pair.new(id, pair.row, duplicate(pair.edge, id), duplicate(pair.face, id), pair.edge2 && duplicate(pair.edge2, id))
     end
 
-    # The pair of a placed component (part in panel), or nil if its other component is missing
+    # The joint of a placed component (part in panel), or nil if a component is missing.
+    # Components of other panels with the same pair id are found; for each role the nearest one is
+    # used (a shared definition has the same component in all its instances).
     def pair(panels, panel, instance)
       id = instance.get_attribute(DICTIONARY, 'pair_id')
       role = instance.get_attribute(DICTIONARY, 'role')
       return nil if id.nil?
+      triple = instance.get_attribute(DICTIONARY, 'kind') == 'triple'
       here = Part.new(panel, instance)
       origin = here.transformation.origin
-      other = nil
-      best = nil
+      found = { 'edge' => [], 'face' => [] }
       panels.each do |p|
-        next if p.definition == panel.definition && p.key == panel.key
+        next if p.key == panel.key
         p.definition.entities.grep(Sketchup::ComponentInstance).each do |i|
-          next unless i.get_attribute(DICTIONARY, 'pair_id') == id && i.get_attribute(DICTIONARY, 'role') != role
+          next unless i.get_attribute(DICTIONARY, 'pair_id') == id
+          list = found[i.get_attribute(DICTIONARY, 'role')]
           part = Part.new(p, i)
-          d = part.transformation.origin.distance(origin)
-          other, best = part, d if best.nil? || d < best
+          list << [ part.transformation.origin.distance(origin), part ] if list
         end
       end
-      return nil if other.nil?
-      row = instance.get_attribute(DICTIONARY, 'row')
-      role == 'edge' ? Pair.new(id, row, here, other) : Pair.new(id, row, other, here)
+      edges = found['edge'].sort_by(&:first).map(&:last)
+      face = role == 'face' ? here : found['face'].min_by(&:first)&.last
+      edge = role == 'edge' ? here : edges.shift
+      return nil if face.nil? || edge.nil?
+      edge2 = nil
+      if triple
+        edge2 = edges.find { |e| e.panel.key != edge.panel.key }
+        return nil if edge2.nil?
+        face_origin = face.transformation.origin
+        if face_origin.distance(edge2.transformation.origin) < face_origin.distance(edge.transformation.origin)
+          edge, edge2 = edge2, edge
+        end
+      end
+      Pair.new(id, instance.get_attribute(DICTIONARY, 'row'), edge, face, edge2)
     end
 
     # Pair of a surface component placed by hand (no pair_id): the surface component of a connected
@@ -323,7 +344,7 @@ module OclJoints
         part.instance.set_attribute(DICTIONARY, 'role', role)
         part.instance.set_attribute(DICTIONARY, 'row', pair.row) if pair.row
       end
-      Pair.new(id, pair.row, pair.edge, pair.face)
+      Pair.new(id, pair.row, pair.edge, pair.face, pair.edge2)
     end
 
     # Moves a placed component by a world vector

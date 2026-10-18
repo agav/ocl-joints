@@ -101,6 +101,32 @@ module OclJoints
       found.empty? ? [ (l0 + l1) / 2.0 ] : found.sort
     end
 
+    # Second edge panel of a 3-panel joint: its edge touches the other face of the central panel,
+    # on the same axis as the first edge panel (one through hole connects both).
+    # first: contact of the first edge panel with the central panel; second_edge_box: the candidate.
+    # Returns [ contact, segment ] or nil; segment is the common part of both edge middle lines,
+    # as l values of the first contact.
+    def third(first, second_edge_box, center_box)
+      c = contact(second_edge_box, center_box)
+      return nil if c.nil? || dot(c.normal, first.normal) > -PARALLEL
+      return nil if dot(c.l_axis, first.l_axis).abs < PARALLEL
+      # the first middle line, moved through the central panel, must be the second middle line
+      a = joint_point(first, first.segment[0])
+      shift = dot(sub(c.corner, a), c.normal)
+      moved = add(a, mul(c.normal, shift))
+      return nil if (dot(sub(moved, c.corner), c.t_axis) - c.thickness / 2.0).abs > TOL
+      ls = c.segment.map { |l| dot(sub(joint_point(c, l), first.corner), first.l_axis) }
+      s0 = [ first.segment[0], ls.min ].max
+      s1 = [ first.segment[1], ls.max ].min
+      return nil if s1 - s0 < MIN_LENGTH
+      [ c, [ s0, s1 ] ]
+    end
+
+    # Point on the second middle line of a 3-panel joint, opposite to a point of the first one
+    def opposite_point(second, point)
+      add(point, mul(second.normal, dot(sub(second.corner, point), second.normal)))
+    end
+
     # Point on the edge middle line at position l
     def joint_point(contact, l)
       add(contact.corner, add(mul(contact.l_axis, l), mul(contact.t_axis, contact.thickness / 2.0)))
