@@ -99,7 +99,7 @@ module OclJoints
     end
 
     def onReturn(view)
-      _commit if @mode == :place && @preview
+      return _commit if @mode == :place && @preview
       _status
       view.invalidate
     end
@@ -298,6 +298,10 @@ module OclJoints
         @note += ' Also in other instances: ' + shared.map { |d| "#{d.name} (#{d.instances.length})" }.join(', ') + '.'
       end
       @preview = nil
+      # back to the Select tool; the result stays in the status bar
+      note = @note
+      @model.select_tool(nil)
+      UI.start_timer(0, false) { Sketchup.status_text = note }
     end
 
     def _features(definition)

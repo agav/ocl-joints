@@ -196,7 +196,25 @@ module OclJoints
       instance.set_attribute(DICTIONARY, 'pair_id', pair_id)
       instance.set_attribute(DICTIONARY, 'role', role)
       instance.set_attribute(DICTIONARY, 'row', row)
+      _glue(instance)
       instance
+    end
+
+    # Glues the component to the panel face under its origin, as SketchUp does when the component
+    # is placed by hand: the face must have the same normal as the component Z axis.
+    # Components without "Glue to" behaviour stay unglued.
+    def _glue(instance)
+      return unless instance.definition.behavior.is2d?
+      t = instance.transformation
+      origin = t.origin
+      z = t.zaxis
+      face = instance.parent.entities.grep(Sketchup::Face).find do |f|
+        f.normal.parallel?(z) && f.normal % z > 0 && f.plane && origin.on_plane?(f.plane) &&
+          [ Sketchup::Face::PointInside, Sketchup::Face::PointOnEdge, Sketchup::Face::PointOnVertex ].include?(f.classify_point(origin))
+      end
+      instance.glued_to = face if face
+    rescue ArgumentError
+      nil
     end
 
     def new_pair_id = SecureRandom.uuid
