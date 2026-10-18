@@ -18,6 +18,7 @@ module OclJoints
     KEY_BACKSPACE = 8
     KEY_TAB = 9
     KEY_DELETE = 46
+    OWN_KEYS = [ KEY_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN ].freeze
     SNAP = 3.0 / 25.4      # drag snaps to guide crossings and the edge middle closer than this
     PICK_APERTURE = 6
 
@@ -104,6 +105,8 @@ module OclJoints
       view.invalidate
     end
 
+    # Tab and the arrow keys always belong to the tool: true on key down and on key up stops
+    # SketchUp from using them too (camera and focus navigation).
     def onKeyDown(key, repeat, flags, view)
       handled = true
       rows = OclJoints.config[:rows]
@@ -115,7 +118,7 @@ module OclJoints
       elsif key == KEY_TAB
         @mode = :place
         _reset
-      elsif (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
+      elsif @mode == :place && (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
         _select_row((key - 1) % 48 % 9)
       elsif @mode == :place && @preview && [ VK_LEFT, VK_RIGHT ].include?(key)
         @preview[:ke] = Joint.next_option(@preview[:edge_options], @preview[:ke], key == VK_RIGHT ? 1 : -1)
@@ -130,12 +133,12 @@ module OclJoints
         _status
         view.invalidate
       end
-      handled
+      handled || OWN_KEYS.include?(key)
     end
 
     def onKeyUp(key, repeat, flags, view)
       @shift = false if key == VK_SHIFT
-      false
+      OWN_KEYS.include?(key) || (@mode == :place && (key.between?(49, 57) || key.between?(97, 105)))
     end
 
     def onUserText(text, view)
