@@ -30,8 +30,8 @@ module OclJoints
     @row_index = i
   end
 
-  def self.start_tool(mode)
-    Sketchup.active_model.select_tool(JointTool.new(mode))
+  def self.start_tool
+    Sketchup.active_model.select_tool(JointTool.new)
   end
 
   def self.show_settings
@@ -79,31 +79,23 @@ module OclJoints
   end
 
   unless file_loaded?(__FILE__)
-    commands = {
-      place: [ 'Place joints', 'Select two connected panels and add connector pairs', 'place' ],
-      edit: [ 'Edit joints', 'Move or erase placed connector pairs', 'edit' ],
-    }.to_h do |mode, (name, tip, icon)|
-      cmd = UI::Command.new(name) { start_tool(mode) }
-      cmd.tooltip = name
-      cmd.status_bar_text = tip
-      cmd.small_icon = cmd.large_icon = File.join(PLUGIN_ROOT, 'icons', "#{icon}.svg")
-      [ mode, cmd ]
-    end
+    joints = UI::Command.new('Joints') { start_tool }
+    joints.tooltip = 'Joints'
+    joints.status_bar_text = 'Select, move, copy and erase connector pairs; hold Alt and click two panels to add a pair'
+    joints.small_icon = joints.large_icon = File.join(PLUGIN_ROOT, 'icons', 'joints.svg')
     settings = UI::Command.new('Settings...') { show_settings }
     settings.tooltip = 'OCL Joints settings'
     settings.status_bar_text = 'Edit the connector table and the library folders'
     settings.small_icon = settings.large_icon = File.join(PLUGIN_ROOT, 'icons', 'settings.svg')
 
     menu = UI.menu('Extensions').add_submenu('OCL Joints')
-    menu.add_item(commands[:place])
-    menu.add_item(commands[:edit])
+    menu.add_item(joints)
     menu.add_item(settings)
     menu.add_separator
     menu.add_item('Reload extension (dev)') { reload }
 
     toolbar = UI::Toolbar.new('OCL Joints')
-    toolbar.add_item(commands[:place])
-    toolbar.add_item(commands[:edit])
+    toolbar.add_item(joints)
     toolbar.add_item(settings)
     toolbar.restore
 
