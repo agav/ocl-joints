@@ -18,6 +18,10 @@
   textarea { width: 100%; height: 54px; box-sizing: border-box; font: 12px Consolas, monospace; }
   .bar { margin-top: 10px; display: flex; justify-content: space-between; }
   .hint { color: #666; font-size: 12px; }
+  #suggest { position: absolute; display: none; background: #fff; border: 1px solid #999; max-height: 220px;
+             overflow-y: auto; z-index: 10; box-shadow: 0 2px 6px rgba(0,0,0,.2); font: 12px Consolas, monospace; }
+  #suggest div { padding: 3px 6px; cursor: pointer; white-space: nowrap; }
+  #suggest div:hover, #suggest div.active { background: #dbe8ff; }
 </style>
 </head>
 <body>
@@ -38,7 +42,7 @@ In the tool, Up/Down select the row.</div>
   <tbody id="triples"></tbody>
 </table>
 <button onclick="addRow('triples')">Add row</button>
-<datalist id="names"></datalist>
+<div id="suggest"></div>
 
 <h2>Library folders</h2>
 <div class="hint">If the model has no component with the name, the tool loads &lt;name&gt;.skp from these folders (subfolders too). One folder per line.</div>
@@ -59,12 +63,13 @@ In the tool, Up/Down select the row.</div>
 
 <script>
   const tables = { rows: [], triples: [] };
+  let componentNames = [];
 
   function load(config, names) {
     tables.rows = config.rows;
     tables.triples = config.triples || [];
     document.getElementById('library').value = config.library.join('\n');
-    document.getElementById('names').innerHTML = names.map(n => `<option value="${esc(n)}">`).join('');
+    componentNames = names;
     render();
   }
 
@@ -78,8 +83,8 @@ In the tool, Up/Down select the row.</div>
         <tr>
           <td class="n">${i + 1}</td>
           <td><input type="text" value="${esc(r.name)}" oninput="tables.${t}[${i}].name = this.value"></td>
-          <td><input type="text" list="names" value="${esc(r.face)}" oninput="tables.${t}[${i}].face = this.value"></td>
-          <td><input type="text" list="names" value="${esc(r.edge)}" oninput="tables.${t}[${i}].edge = this.value"></td>
+          <td><input type="text" class="comp" data-t="${t}" data-i="${i}" data-k="face" value="${esc(r.face)}"></td>
+          <td><input type="text" class="comp" data-t="${t}" data-i="${i}" data-k="edge" value="${esc(r.edge)}"></td>
           <td class="learned">${r.learned ? `${r.learned.edge}/${r.learned.face} <button title="Forget" onclick="forget('${t}', ${i})">×</button>` : '–'}</td>
           <td class="act">
             <button title="Up" onclick="move('${t}', ${i}, -1)">↑</button><button title="Down" onclick="move('${t}', ${i}, 1)">↓</button><button title="Delete" onclick="removeRow('${t}', ${i})">✕</button>
@@ -104,6 +109,60 @@ In the tool, Up/Down select the row.</div>
   function collect() {
     return { library: document.getElementById('library').value.split('\n'), rows: tables.rows, triples: tables.triples };
   }
+
+  // Component name dropdown (the <datalist> popup does not take clicks in SketchUp's dialog)
+  const suggest = document.getElementById('suggest');
+  let target = null, active = -1;
+
+  function setValue(input, value) {
+    input.value = value;
+    tables[input.dataset.t][+input.dataset.i][input.dataset.k] = value;
+  }
+  function showSuggest(input) {
+    target = input;
+    const q = input.value.trim().toLowerCase();
+    const items = componentNames.filter(n => n.toLowerCase().includes(q));
+    if (!items.length) { suggest.style.display = 'none'; return; }
+    suggest.innerHTML = items.map(n => `<div>${esc(n)}</div>`).join('');
+    const r = input.getBoundingClientRect();
+    suggest.style.left = (r.left + window.scrollX) + 'px';
+    suggest.style.top = (r.bottom + window.scrollY) + 'px';
+    suggest.style.minWidth = r.width + 'px';
+    suggest.style.display = 'block';
+    active = -1;
+  }
+  function hideSuggest() { suggest.style.display = 'none'; target = null; }
+
+  document.addEventListener('focusin', e => { if (e.target.classList.contains('comp')) showSuggest(e.target); });
+  document.addEventListener('input', e => {
+    if (!e.target.classList.contains('comp')) return;
+    setValue(e.target, e.target.value);
+    showSuggest(e.target);
+  });
+  document.addEventListener('focusout', e => { if (e.target === target) setTimeout(hideSuggest, 150); });
+  // mousedown, not click: it comes before the input loses the focus
+  suggest.addEventListener('mousedown', e => {
+    if (e.target.parentNode !== suggest || !target) return;
+    e.preventDefault();
+    setValue(target, e.target.textContent);
+    hideSuggest();
+  });
+  document.addEventListener('keydown', e => {
+    if (!target || suggest.style.display !== 'block') return;
+    const items = suggest.children;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      [...items].forEach((d, i) => d.classList.toggle('active', i === active));
+      items[active].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      setValue(target, items[active].textContent);
+      hideSuggest();
+    } else if (e.key === 'Escape') {
+      hideSuggest();
+    }
+  });
 
   window.onload = () => sketchup.ready();
 </script>
