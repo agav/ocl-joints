@@ -7,6 +7,7 @@ module OclJoints
 
     FEATURE_RE = /\A\s*[fg]_/i
     DICTIONARY = 'ocl_joints'
+    MATCH_TOL = 1.0 / 25.4   # origins of a hand-placed pair closer than this make a pair
 
     # A panel instance with its full path from the model root
     #   transformation: definition space -> world
@@ -239,7 +240,8 @@ module OclJoints
       instance.material = old.material
       instance.set_attribute(DICTIONARY, 'pair_id', pair_id)
       instance.set_attribute(DICTIONARY, 'role', old.get_attribute(DICTIONARY, 'role'))
-      instance.set_attribute(DICTIONARY, 'row', old.get_attribute(DICTIONARY, 'row'))
+      row = old.get_attribute(DICTIONARY, 'row')
+      instance.set_attribute(DICTIONARY, 'row', row) if row
       turn = old.get_attribute(DICTIONARY, 'turn')
       instance.set_attribute(DICTIONARY, 'turn', turn) if turn
       _glue(instance)
@@ -273,6 +275,48 @@ module OclJoints
       return nil if other.nil?
       row = instance.get_attribute(DICTIONARY, 'row')
       role == 'edge' ? Pair.new(id, row, here, other) : Pair.new(id, row, other, here)
+    end
+
+    # Pair of a surface component placed by hand (no pair_id): the surface component of a connected
+    # panel with the origin at the same place. Pair id is nil until link writes it.
+    # rows: connector table, to find the connector name from the component names.
+    def manual_pair(panels, panel, instance, rows)
+      return nil unless feature?(instance) && instance.parent == panel.definition
+      here = Part.new(panel, instance)
+      origin = here.transformation.origin.to_a
+      best = nil
+      panels.each do |p|
+        next if p.key == panel.key
+        contact, here_is_edge = Joint.joint(panel.box, p.box)
+        next unless contact && Joint.on_contact_plane?(contact, origin) && Joint.in_contact?(contact, origin)
+        p.definition.entities.each do |e|
+          next unless feature?(e)
+          part = Part.new(p, e)
+          d = Joint.length(Joint.sub(part.transformation.origin.to_a, origin))
+          next if d > MATCH_TOL || (best && d >= best[0])
+          best = [ d, here_is_edge ? [ here, part ] : [ part, here ] ]
+        end
+      end
+      return nil if best.nil?
+      edge, face = best[1]
+      row = rows.find { |r| component_name?(edge.instance, r[:edge]) && component_name?(face.instance, r[:face]) }
+      Pair.new(nil, row && row[:name], edge, face)
+    end
+
+    def component_name?(instance, name)
+      [ instance.definition.name, instance.name ].any? { |n| n.sub(/#\d+\z/, '').casecmp?(name) }
+    end
+
+    # Pair with a pair id written to both components (a hand-placed pair gets one now)
+    def link(pair)
+      return pair if pair.id
+      id = new_pair_id
+      [ [ pair.edge, 'edge' ], [ pair.face, 'face' ] ].each do |part, role|
+        part.instance.set_attribute(DICTIONARY, 'pair_id', id)
+        part.instance.set_attribute(DICTIONARY, 'role', role)
+        part.instance.set_attribute(DICTIONARY, 'row', pair.row) if pair.row
+      end
+      Pair.new(id, pair.row, pair.edge, pair.face)
     end
 
     # Moves a placed component by a world vector

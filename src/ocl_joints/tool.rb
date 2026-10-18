@@ -195,6 +195,7 @@ module OclJoints
       l = _selected_l(contact)
       target = (l - l0 <= l1 - l ? l0 + distance : l1 - distance).clamp(l0, l1)
       @model.start_operation(@copy ? 'Copy joint' : 'Move joint', true)
+      @selected = Scene.link(@selected)
       if @copy
         @selected = Scene.duplicate_pair(@selected)
         @pairs = {}
@@ -408,6 +409,7 @@ module OclJoints
       return if delta.abs < 1e-6
       unless @drag[:moved]
         @model.start_operation(@copy ? 'Copy joint' : 'Move joint', true)
+        @selected = Scene.link(@selected)
         @drag[:moved] = true
         if @copy
           @drag[:original] = @selected
@@ -448,13 +450,14 @@ module OclJoints
       rows = OclJoints.config[:rows]
       index = row_index || rows.index { |r| r[:name] == pair.row }
       row = index ? rows[index] : nil
-      if row.nil?
-        @note = "Connector '#{pair.row}' is not in the table."
-        return
+      if row.nil? && row_index.nil?
+        # hand-placed pair of components that are not in the table: turn them as they are
+        row = { name: pair.row, edge: pair.edge.instance.definition.name, face: pair.face.instance.definition.name }
       end
       library = OclJoints.config[:library]
       edge_panel, face_panel = pair.edge.panel, pair.face.panel
       @model.start_operation('Change joint', true)
+      pair = @selected = Scene.link(@selected)
       edge_def = Scene.definition(@model, row[:edge], library)
       face_def = Scene.definition(@model, row[:face], library)
       missing = [ [ row[:edge], edge_def ], [ row[:face], face_def ] ].reject { |_, d| d }.map(&:first)
@@ -484,13 +487,13 @@ module OclJoints
       @selected = Scene::Pair.new(pair.id, row[:name], Scene::Part.new(edge_panel, edge), Scene::Part.new(face_panel, face))
       @hover_pair = nil
       @pairs = {}
-      OclJoints.row_index = index
-      if row_index.nil? && contact.inner
+      OclJoints.row_index = index if index
+      if index && row_index.nil? && contact.inner
         config = OclJoints.config
         config[:rows][index] = row.merge(learned: { edge: ke, face: kf })
         OclJoints.save_config(config)
       end
-      @note = "Pair: #{row[:name]}."
+      @note = "Pair: #{row[:name] || 'not in the table'}."
     end
 
     def _erase
@@ -517,12 +520,17 @@ module OclJoints
 
     def _pick_pair(view, x, y)
       _picked_paths(view, x, y).each do |full|
-        j = full.index { |e| e.is_a?(Sketchup::ComponentInstance) && e.get_attribute(Scene::DICTIONARY, 'pair_id') }
+        # the component directly inside a panel
+        j = (1...full.length).find { |n| @panel_by_key.key?(full[0...n].map(&:entityID).join('/')) }
         next if j.nil?
         panel = @panel_by_key[full[0...j].map(&:entityID).join('/')]
-        next if panel.nil?
-        key = "#{panel.key}/#{full[j].entityID}"
-        @pairs[key] = Scene.pair(@panels, panel, full[j]) unless @pairs.key?(key)
+        instance = full[j]
+        next unless Scene.feature?(instance)
+        key = "#{panel.key}/#{instance.entityID}"
+        unless @pairs.key?(key)
+          pair = instance.get_attribute(Scene::DICTIONARY, 'pair_id') && Scene.pair(@panels, panel, instance)
+          @pairs[key] = pair || Scene.manual_pair(@panels, panel, instance, OclJoints.config[:rows])
+        end
         return @pairs[key] if @pairs[key]
       end
       nil

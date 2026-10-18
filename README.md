@@ -93,6 +93,15 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
 The tool uses them to find the other component of the pair.
 
+You can also edit components that you placed by hand. The tool finds a pair if:
+
+- Both components are directly in the panels (not inside other groups), and their names start with `f_` or `g_`.
+- The two panels connect (edge to face).
+- The component origins are at the same point on the contact plane (1 mm tolerance).
+
+The tool gets the connector name from the table (face and edge component names). When you move, copy, turn or change
+the pair, the tool writes the attributes.
+
 ### Cursor
 
 - Place mode: arrow with a yellow panel corner.
