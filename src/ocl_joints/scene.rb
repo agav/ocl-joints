@@ -169,10 +169,17 @@ module OclJoints
       result
     end
 
-    # Component definition by name: from the model, or loaded from <name>.skp in a library folder
+    # Component definition by name: from the model, or loaded from <name>.skp in a library folder.
+    # In the model the name can also be a definition name with SketchUp's "#1" suffix, or the name
+    # of an instance (ocl-viyar reads f_ / g_ names from instances too).
     def definition(model, name, library)
+      name = name.to_s.strip
+      return nil if name.empty?
       defs = model.definitions.reject { |d| d.group? || d.image? }
-      found = defs.find { |d| d.name == name } || defs.find { |d| d.name.casecmp?(name) }
+      found = defs.find { |d| d.name == name } ||
+              defs.find { |d| d.name.casecmp?(name) } ||
+              defs.find { |d| d.name.sub(/#\d+\z/, '').casecmp?(name) } ||
+              defs.find { |d| d.instances.any? { |i| i.name.strip.casecmp?(name) } }
       return found if found
       library.each do |folder|
         file = Dir.glob(File.join(folder.tr('\\', '/'), '**', '*.skp')).find { |f| File.basename(f, '.*').casecmp?(name) }

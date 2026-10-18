@@ -40,14 +40,17 @@ module OclJoints
                                  width: 760, height: 520, style: UI::HtmlDialog::STYLE_DIALOG)
     @dialog.set_file(File.join(PLUGIN_ROOT, 'settings.html'))
     send = lambda do |config|
-      names = Sketchup.active_model.definitions.reject { |d| d.group? || d.image? }.map(&:name)
-                      .grep(/\A\s*[fg]_/i).sort
+      defs = Sketchup.active_model.definitions.reject { |d| d.group? || d.image? }
+      names = (defs.map(&:name) + defs.flat_map { |d| d.instances.map(&:name) })
+              .map(&:strip).grep(/\A[fg]_/i).uniq.sort
       @dialog.execute_script("load(#{JSON.generate(Config.normalize(config))}, #{JSON.generate(names)})")
     end
     @dialog.add_action_callback('ready') { send.call(config) }
     @dialog.add_action_callback('save') do |_, json|
       save_config(Config.parse(json))
       @dialog.close
+    rescue StandardError => e
+      UI.messagebox("Settings not saved: #{e.message}")
     end
     @dialog.add_action_callback('cancel') { @dialog.close }
     @dialog.add_action_callback('defaults') { send.call(Config.default) }

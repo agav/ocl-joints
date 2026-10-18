@@ -283,6 +283,13 @@ module OclJoints
     # --- place mode ---
 
     def _place_click(view, x, y)
+      _place_click!(view, x, y)
+    rescue StandardError => e
+      @preview = nil
+      UI.messagebox("OCL Joints error: #{e.message}\n\n#{e.backtrace.first(5).join("\n")}")
+    end
+
+    def _place_click!(view, x, y)
       return _commit if @preview
       panel = _pick_panel(view, x, y)
       if panel.nil?
@@ -317,9 +324,13 @@ module OclJoints
       edge_def = Scene.definition(@model, row[:edge], library)
       face_def = Scene.definition(@model, row[:face], library)
       @model.commit_operation
-      missing = [ [ row[:edge], edge_def ], [ row[:face], face_def ] ].reject { |_, d| d }.map(&:first)
+      missing = [ [ 'Edge', row[:edge], edge_def ], [ 'Face', row[:face], face_def ] ].reject { |*, d| d }
       unless missing.empty?
-        @note = "Component not found: #{missing.join(', ')}. Add it to the model or to a library folder."
+        @note = "Component not found: #{missing.map { |_, n, _| "'#{n}'" }.join(', ')}."
+        UI.messagebox("Connector '#{row[:name]}': component not found.\n\n" +
+                      missing.map { |role, n, _| "#{role} component: '#{n}'" }.join("\n") +
+                      "\n\nThe name must be the name of a component definition or instance in the model, " \
+                      "or of a .skp file in a library folder (Settings).")
         return
       end
 
@@ -597,7 +608,8 @@ module OclJoints
              else
                "Select a placed pair. Ctrl: copy #{@copy ? 'off' : 'on'}. Esc: exit."
              end
-      Sketchup.status_text = [ connector, text, @note ].compact.join(' ')
+      # the note first: the status bar cuts long texts
+      Sketchup.status_text = [ @note, connector, text ].compact.join(' ')
       return unless @mode == :edit && @selected && (contact = _selected_contact)
       l0, l1 = contact.segment
       l = _selected_l(contact)
