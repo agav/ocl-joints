@@ -10,10 +10,10 @@ module OclJoints
   # component, Shift + arrows turn the face component.
   class JointTool
 
-    # OpenCutList's highlight opacities, with a cream color in place of its yellow (254, 222, 11)
-    COLOR_PART = Sketchup::Color.new(255, 240, 190, 200)
-    COLOR_PART_HIGHLIGHTED = Sketchup::Color.new(255, 240, 190, 255)
-    COLOR_CANDIDATE = Sketchup::Color.new(255, 240, 190, 120)
+    # Same colors as OpenCutList's part highlight
+    COLOR_PART = Sketchup::Color.new(254, 222, 11, 200)
+    COLOR_PART_HIGHLIGHTED = Sketchup::Color.new(254, 222, 11, 255)
+    COLOR_CANDIDATE = Sketchup::Color.new(254, 222, 11, 120)
     COLOR_EDGE_PART = Sketchup::Color.new(0, 90, 255)
     COLOR_FACE_PART = Sketchup::Color.new(230, 30, 30)
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
