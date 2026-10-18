@@ -106,9 +106,11 @@ module OclJoints
 
     def onLButtonUp(flags, x, y, view)
       return unless @drag
-      @model.commit_operation if @drag[:moved]
+      if @drag[:moved]
+        @model.commit_operation
+        @copy = false
+      end
       @drag = nil
-      @copy = false
       _status
       view.invalidate
     end
