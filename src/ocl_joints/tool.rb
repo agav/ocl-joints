@@ -5,6 +5,7 @@ module OclJoints
   #               arrows turn them, Enter or click adds them.
   #   edit mode:  select a placed pair, drag it along the edge or type a distance, Delete erases it.
   #               Ctrl (tap) switches copy on and off, as in SketchUp's Move tool.
+  #               The arrow keys change the selected pair as in place mode.
   # Place mode keys: Left / Right select the previous / next connector, Alt + arrows turn the edge
   # component, Shift + arrows turn the face component.
   class JointTool
@@ -147,6 +148,16 @@ module OclJoints
           end
         elsif [ VK_LEFT, VK_RIGHT ].include?(key) && !rows.empty?
           _select_row((_row_index + step) % rows.length)
+        end
+      elsif @mode == :edit && @selected && ARROWS.include?(key)
+        step = [ VK_RIGHT, VK_UP ].include?(key) ? 1 : -1
+        if @alt
+          _change_selected(edge_step: step)
+        elsif @shift
+          _change_selected(face_step: step)
+        elsif [ VK_LEFT, VK_RIGHT ].include?(key) && !rows.empty?
+          current = rows.index { |r| r[:name] == @selected.row } || _row_index
+          _change_selected(row_index: (current + step) % rows.length)
         end
       elsif @mode == :place && (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
         _select_row((key - 1) % 48 % 9)
@@ -328,8 +339,8 @@ module OclJoints
       @model.start_operation('Add joints', true)
       pairs = p[:points].map do |point|
         id = Scene.new_pair_id
-        edge = Scene.add(p[:edge_panel], p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), id, 'edge', row[:name])
-        face = Scene.add(p[:face_panel], p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), id, 'face', row[:name])
+        edge = Scene.add(p[:edge_panel], p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), id, 'edge', row[:name], p[:ke])
+        face = Scene.add(p[:face_panel], p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), id, 'face', row[:name], p[:kf])
         Scene::Pair.new(id, row[:name], Scene::Part.new(p[:edge_panel], edge), Scene::Part.new(p[:face_panel], face))
       end
       @model.commit_operation
@@ -427,6 +438,61 @@ module OclJoints
       Joint.dot(Joint.sub(@selected.edge.transformation.origin.to_a, contact.corner), contact.l_axis)
     end
 
+    # Replaces the components of the selected pair (same pair id and position):
+    #   row_index:  other connector, turns predicted as in place mode
+    #   edge_step / face_step: next allowed turn of the edge / face component
+    def _change_selected(row_index: nil, edge_step: nil, face_step: nil)
+      pair = @selected
+      contact = _selected_contact
+      return if contact.nil?
+      rows = OclJoints.config[:rows]
+      index = row_index || rows.index { |r| r[:name] == pair.row }
+      row = index ? rows[index] : nil
+      if row.nil?
+        @note = "Connector '#{pair.row}' is not in the table."
+        return
+      end
+      library = OclJoints.config[:library]
+      edge_panel, face_panel = pair.edge.panel, pair.face.panel
+      @model.start_operation('Change joint', true)
+      edge_def = Scene.definition(@model, row[:edge], library)
+      face_def = Scene.definition(@model, row[:face], library)
+      missing = [ [ row[:edge], edge_def ], [ row[:face], face_def ] ].reject { |_, d| d }.map(&:first)
+      unless missing.empty?
+        @model.abort_operation
+        @note = "Component not found: #{missing.join(', ')}. Add it to the model or to a library folder."
+        return
+      end
+
+      point = pair.edge.transformation.origin.to_a
+      frames = Joint.frames(contact)
+      prediction = Joint.predict(contact, point, edge_panel.box, _features(edge_def),
+                                 face_panel.box, _features(face_def), row[:learned])
+      ke, kf = prediction[:edge], prediction[:face]
+      if row_index.nil?
+        ke = Scene.turn(pair.edge, frames[:edge])
+        kf = Scene.turn(pair.face, frames[:face])
+        ke = Joint.next_option(prediction[:edge_options], ke, edge_step) if edge_step
+        kf = Joint.next_option(prediction[:face_options], kf, face_step) if face_step
+      end
+
+      [ pair.edge, pair.face ].each { |part| part.instance.erase! if part.instance.valid? }
+      edge = Scene.add(edge_panel, edge_def, Scene.world_transformation(point, frames[:edge], ke), pair.id, 'edge', row[:name], ke)
+      face = Scene.add(face_panel, face_def, Scene.world_transformation(point, frames[:face], kf), pair.id, 'face', row[:name], kf)
+      @model.commit_operation
+
+      @selected = Scene::Pair.new(pair.id, row[:name], Scene::Part.new(edge_panel, edge), Scene::Part.new(face_panel, face))
+      @hover_pair = nil
+      @pairs = {}
+      OclJoints.row_index = index
+      if row_index.nil? && contact.inner
+        config = OclJoints.config
+        config[:rows][index] = row.merge(learned: { edge: ke, face: kf })
+        OclJoints.save_config(config)
+      end
+      @note = "Pair: #{row[:name]}."
+    end
+
     def _erase
       @model.start_operation('Erase joint', true)
       [ @selected.edge, @selected.face ].each { |part| part.instance.erase! if part.instance.valid? }
@@ -519,7 +585,7 @@ module OclJoints
                  'Select a panel. Left/Right or keys 1-9: connector.'
                end
              elsif @selected
-               "Drag: #{@copy ? 'copy' : 'move'} along the edge. Ctrl: copy #{@copy ? 'off' : 'on'}. Type a distance from the nearest end. Delete: erase. Esc: exit."
+               "Drag: #{@copy ? 'copy' : 'move'} along the edge. Ctrl: copy #{@copy ? 'off' : 'on'}. Left/Right: connector. Alt+arrows: turn edge part. Shift+arrows: turn face part. Type a distance from the nearest end. Delete: erase. Esc: exit."
              else
                "Select a placed pair. Ctrl: copy #{@copy ? 'off' : 'on'}. Esc: exit."
              end

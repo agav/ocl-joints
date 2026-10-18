@@ -83,8 +83,12 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 5. To set an exact position, type a distance. The distance is from the nearest end of the contact.
 6. To copy the pair, push **Ctrl** one time (copy on), then drag or type a distance. The original pair stays.
    Push **Ctrl** again to set copy off. The cursor shows a **+** when copy is on. Copy goes off after each move.
-7. To erase the pair, push **Delete** or right-click **Erase pair**.
-8. Push **Esc** to exit the tool. Click an empty area to clear the selection.
+7. To change the selected pair, use the same keys as in place mode:
+   - **Left / Right**: change the pair to the previous / next connector of the table. The tool selects the turns again.
+   - **Alt + arrow**: turn the edge component 90°.
+   - **Shift + arrow**: turn the face component 90°.
+8. To erase the pair, push **Delete** or right-click **Erase pair**.
+9. Push **Esc** to exit the tool. Click an empty area to clear the selection.
 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
 The tool uses them to find the other component of the pair.

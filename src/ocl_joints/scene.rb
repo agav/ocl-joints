@@ -187,7 +187,7 @@ module OclJoints
     end
 
     # Adds a component into the panel definition at a world transformation
-    def add(panel, definition, world, pair_id, role, row)
+    def add(panel, definition, world, pair_id, role, row, turn = nil)
       local = panel.transformation.inverse * world
       # in a mirrored panel the local transformation is mirrored too: mirror the component back
       # along its X axis (the edge line), so it keeps a normal transformation
@@ -196,8 +196,19 @@ module OclJoints
       instance.set_attribute(DICTIONARY, 'pair_id', pair_id)
       instance.set_attribute(DICTIONARY, 'role', role)
       instance.set_attribute(DICTIONARY, 'row', row)
+      instance.set_attribute(DICTIONARY, 'turn', turn) if turn
       _glue(instance)
       instance
+    end
+
+    # Turn (0..3) of a placed component in its joint frame: from its attribute, or for components
+    # without it, from the direction of its Y axis (a mirror along X does not change Y)
+    def turn(part, axes)
+      k = part.instance.get_attribute(DICTIONARY, 'turn')
+      return k if k.is_a?(Integer)
+      y = part.transformation.yaxis.normalize.to_a
+      x, fy = axes
+      [ fy, Joint.mul(x, -1), Joint.mul(fy, -1), x ].each_with_index.max_by { |v, _| Joint.dot(v, y) }.last
     end
 
     # Glues the component to the panel face under its origin, as SketchUp does when the component
@@ -229,6 +240,8 @@ module OclJoints
       instance.set_attribute(DICTIONARY, 'pair_id', pair_id)
       instance.set_attribute(DICTIONARY, 'role', old.get_attribute(DICTIONARY, 'role'))
       instance.set_attribute(DICTIONARY, 'row', old.get_attribute(DICTIONARY, 'row'))
+      turn = old.get_attribute(DICTIONARY, 'turn')
+      instance.set_attribute(DICTIONARY, 'turn', turn) if turn
       _glue(instance)
       Part.new(part.panel, instance)
     end
