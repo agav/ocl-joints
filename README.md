@@ -94,9 +94,9 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 
 ### Cursor
 
-- Select a pair: arrow with orange move arrows.
+- Select a pair: arrow with a bolt.
 - Copy on: the same, with an orange **+**.
-- Alt held (select panels): arrow with a yellow panel corner.
+- Alt held (select panels): arrow with a bolt and a yellow panel corner.
 
 ## Settings
 
