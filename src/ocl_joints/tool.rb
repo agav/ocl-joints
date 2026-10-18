@@ -349,7 +349,7 @@ module OclJoints
     # Definitions of a connector row inside an open operation; on failure the operation is
     # aborted, a message shows and nil is returned
     def _definitions_for(row, kind)
-      library = OclJoints.config[:library]
+      library = OclJoints.library
       edge_def = Scene.definition(@model, row[:edge], library)
       face_def = Scene.definition(@model, row[:face], library)
       missing = [ [ 'Edge', row[:edge], edge_def ], [ 'Face', row[:face], face_def ] ].reject { |*, d| d }

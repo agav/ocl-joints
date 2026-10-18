@@ -140,8 +140,21 @@ These defaults are the pairs of `lm.skp`.
 This table is empty at the start.
 
 - The tool uses the component definition of the model.
-- If the model does not have it, the tool loads `<name>.skp` from a library folder (subfolders too).
+- If the model does not have it, the tool loads `<name>.skp` from a library folder (subfolders too), and then from the
+  `components` folder of the plugin.
 - The tables are saved in `%APPDATA%\ocl_joints\config.json`. **Import** and **Export** copy it to and from a JSON file.
+
+### Components and tables shipped with the plugin
+
+The plugin can contain the connector components (`src/ocl_joints/components/*.skp`) and the default tables
+(`src/ocl_joints/defaults.json`). A new installation starts with these tables, and **Defaults** in Settings loads them.
+
+To update them from your model:
+
+1. Open a model that contains all components of the tables.
+2. Select **Extensions > OCL Joints > Save components and tables to plugin (dev)**.
+3. The plugin saves each component as `<name>.skp` and the current tables as `defaults.json`.
+   With the development loader, the files go into the repository. Commit them.
 
 ### Component rules
 
