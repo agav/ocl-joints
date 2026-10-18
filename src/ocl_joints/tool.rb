@@ -102,7 +102,7 @@ module OclJoints
     end
 
     def onReturn(view)
-      return _commit if @mode == :place && @preview
+      _commit if @mode == :place && @preview
       _status
       view.invalidate
     end
