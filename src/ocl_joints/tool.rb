@@ -4,6 +4,7 @@ module OclJoints
   #   place mode: select a panel, then a connected panel; the tool shows the component pairs,
   #               arrows turn them, Enter or click adds them.
   #   edit mode:  select a placed pair, drag it along the edge or type a distance, Delete erases it.
+  #               Ctrl (tap) switches copy on and off, as in SketchUp's Move tool.
   # Place mode keys: Left / Right select the previous / next connector, Alt + arrows turn the edge
   # component, Shift + arrows turn the face component.
   class JointTool
@@ -23,6 +24,12 @@ module OclJoints
     SNAP = 3.0 / 25.4      # drag snaps to guide crossings and the edge middle closer than this
     PICK_APERTURE = 6
 
+    # Cursors are made once per SketchUp session
+    def self.cursor(name)
+      @cursors ||= {}
+      @cursors[name] ||= UI.create_cursor(File.join(PLUGIN_ROOT, 'cursors', "#{name}.svg"), 2, 2)
+    end
+
     def initialize(mode = :place)
       @mode = mode
     end
@@ -33,6 +40,10 @@ module OclJoints
       _reset
       @note = @model.active_path ? 'Close the open group or component for correct results.' : nil
       _status
+    end
+
+    def onSetCursor
+      UI.set_cursor(JointTool.cursor(@mode == :place ? 'place' : (@copy ? 'copy' : 'edit')))
     end
 
     def deactivate(view)
@@ -97,6 +108,7 @@ module OclJoints
       return unless @drag
       @model.commit_operation if @drag[:moved]
       @drag = nil
+      @copy = false
       _status
       view.invalidate
     end
@@ -118,6 +130,10 @@ module OclJoints
       elsif key == KEY_ALT
         @alt = true
         handled = false
+      elsif key == COPY_MODIFIER_KEY
+        _toggle_copy unless @ctrl_down || @mode != :edit
+        @ctrl_down = true
+        handled = @mode == :edit
       elsif @mode == :place && ARROWS.include?(key)
         step = [ VK_RIGHT, VK_UP ].include?(key) ? 1 : -1
         if @alt || @shift
@@ -146,6 +162,7 @@ module OclJoints
     def onKeyUp(key, repeat, flags, view)
       @shift = false if key == VK_SHIFT
       @alt = false if key == KEY_ALT
+      @ctrl_down = false if key == COPY_MODIFIER_KEY
       # Alt is kept too, so its release does not open the menu bar
       ARROWS.include?(key) || key == KEY_ALT || (@mode == :place && (key.between?(49, 57) || key.between?(97, 105)))
     end
@@ -163,7 +180,12 @@ module OclJoints
       l0, l1 = contact.segment
       l = _selected_l(contact)
       target = (l - l0 <= l1 - l ? l0 + distance : l1 - distance).clamp(l0, l1)
-      @model.start_operation('Move joint', true)
+      @model.start_operation(@copy ? 'Copy joint' : 'Move joint', true)
+      if @copy
+        @selected = Scene.duplicate_pair(@selected)
+        @pairs = {}
+        @copy = false
+      end
       _move_selected(contact, target - l)
       @model.commit_operation
       _status
@@ -227,6 +249,7 @@ module OclJoints
       @hover_pair = nil
       @selected = nil
       @drag = nil
+      @copy = false
     end
 
     def _row_index
@@ -337,7 +360,28 @@ module OclJoints
       return if contact.nil?
       guides = Scene.guides(@model, [ @selected.edge.panel, @selected.face.panel ])
       snaps = Joint.positions(contact, guides) + [ contact.segment.sum / 2.0 ]
-      @drag = { contact: contact, l: _selected_l(contact), snaps: snaps, moved: false }
+      l = _selected_l(contact)
+      @drag = { contact: contact, l: l, start_l: l, snaps: snaps, moved: false, original: nil }
+    end
+
+    # Copy on: the moving pair becomes a new copy and the original goes back to the drag start.
+    # Copy off: the copy is erased and the original moves to the current position.
+    def _toggle_copy
+      @copy = !@copy
+      return unless @drag && @drag[:moved]
+      contact = @drag[:contact]
+      if @copy
+        original = @selected
+        @selected = Scene.duplicate_pair(original)
+        @drag[:original] = original
+        _move_pair(original, contact, @drag[:start_l] - @drag[:l])
+      elsif (original = @drag[:original])
+        [ @selected.edge, @selected.face ].each { |part| part.instance.erase! if part.instance.valid? }
+        @selected = original
+        @drag[:original] = nil
+        _move_pair(original, contact, @drag[:l] - @drag[:start_l])
+      end
+      @pairs = {}
     end
 
     def _drag(view, x, y)
@@ -349,8 +393,13 @@ module OclJoints
       delta = l - @drag[:l]
       return if delta.abs < 1e-6
       unless @drag[:moved]
-        @model.start_operation('Move joint', true)
+        @model.start_operation(@copy ? 'Copy joint' : 'Move joint', true)
         @drag[:moved] = true
+        if @copy
+          @drag[:original] = @selected
+          @selected = Scene.duplicate_pair(@selected)
+          @pairs = {}
+        end
       end
       _move_selected(contact, delta)
       @drag[:l] = l
@@ -358,9 +407,13 @@ module OclJoints
     end
 
     def _move_selected(contact, delta)
+      _move_pair(@selected, contact, delta)
+    end
+
+    def _move_pair(pair, contact, delta)
       vector = Joint.mul(contact.l_axis, delta)
-      Scene.move(@selected.edge, vector)
-      Scene.move(@selected.face, vector)
+      Scene.move(pair.edge, vector)
+      Scene.move(pair.face, vector)
     end
 
     def _selected_contact
@@ -463,9 +516,9 @@ module OclJoints
                  'Select a panel. Left/Right or keys 1-9: connector.'
                end
              elsif @selected
-               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase. Esc: exit.'
+               "Drag: #{@copy ? 'copy' : 'move'} along the edge. Ctrl: copy #{@copy ? 'off' : 'on'}. Type a distance from the nearest end. Delete: erase. Esc: exit."
              else
-               'Select a placed pair. Esc: exit.'
+               "Select a placed pair. Ctrl: copy #{@copy ? 'off' : 'on'}. Esc: exit."
              end
       Sketchup.status_text = [ connector, text, @note ].compact.join(' ')
       return unless @mode == :edit && @selected && (contact = _selected_contact)

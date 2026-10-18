@@ -81,11 +81,19 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 3. Click to select the pair.
 4. Drag to move the pair along the edge. The pair snaps to guide-line crossings and to the edge middle.
 5. To set an exact position, type a distance. The distance is from the nearest end of the contact.
-6. To erase the pair, push **Delete** or right-click **Erase pair**.
-7. Push **Esc** to exit the tool. Click an empty area to clear the selection.
+6. To copy the pair, push **Ctrl** one time (copy on), then drag or type a distance. The original pair stays.
+   Push **Ctrl** again to set copy off. The cursor shows a **+** when copy is on. Copy goes off after each move.
+7. To erase the pair, push **Delete** or right-click **Erase pair**.
+8. Push **Esc** to exit the tool. Click an empty area to clear the selection.
 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
 The tool uses them to find the other component of the pair.
+
+### Cursor
+
+- Place mode: arrow with a yellow panel corner.
+- Edit mode: arrow with orange move arrows.
+- Edit mode, copy on: the same, with an orange **+**.
 
 ## Settings
 

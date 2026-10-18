@@ -219,6 +219,26 @@ module OclJoints
 
     def new_pair_id = SecureRandom.uuid
 
+    # Copy of a placed component at the same place, with a new pair id
+    def duplicate(part, pair_id)
+      old = part.instance
+      instance = part.panel.definition.entities.add_instance(old.definition, old.transformation)
+      instance.name = old.name
+      instance.layer = old.layer
+      instance.material = old.material
+      instance.set_attribute(DICTIONARY, 'pair_id', pair_id)
+      instance.set_attribute(DICTIONARY, 'role', old.get_attribute(DICTIONARY, 'role'))
+      instance.set_attribute(DICTIONARY, 'row', old.get_attribute(DICTIONARY, 'row'))
+      _glue(instance)
+      Part.new(part.panel, instance)
+    end
+
+    # Copy of a pair at the same place
+    def duplicate_pair(pair)
+      id = new_pair_id
+      Pair.new(id, pair.row, duplicate(pair.edge, id), duplicate(pair.face, id))
+    end
+
     # The pair of a placed component (part in panel), or nil if its other component is missing
     def pair(panels, panel, instance)
       id = instance.get_attribute(DICTIONARY, 'pair_id')
