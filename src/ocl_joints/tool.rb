@@ -12,10 +12,12 @@ module OclJoints
     # Same colors as OpenCutList's part highlight
     COLOR_PART = Sketchup::Color.new(254, 222, 11, 200)
     COLOR_PART_HIGHLIGHTED = Sketchup::Color.new(254, 222, 11, 255)
-    COLOR_CANDIDATE = Sketchup::Color.new(254, 222, 11, 120)
+    COLOR_CANDIDATE = Sketchup::Color.new(255, 255, 255, 150)   # connected panels: white, less strong than yellow
     COLOR_EDGE_PART = Sketchup::Color.new(0, 90, 255)
     COLOR_FACE_PART = Sketchup::Color.new(230, 30, 30)
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
+    COLOR_PAIR_HOVER = Sketchup::Color.new(255, 190, 110)
+    LINE_WIDTH = 1
 
     KEY_BACKSPACE = 8
     KEY_DELETE = 46
@@ -227,8 +229,8 @@ module OclJoints
           _draw_panel(view, @hover, COLOR_PART_HIGHLIGHTED)
         end
       else
-        _draw_pair(view, @hover_pair, COLOR_CANDIDATE, 2) if @hover_pair && @hover_pair != @selected
-        _draw_pair(view, @selected, COLOR_PAIR, 3) if @selected
+        _draw_pair(view, @hover_pair, COLOR_PAIR_HOVER, LINE_WIDTH) if @hover_pair && @hover_pair != @selected
+        _draw_pair(view, @selected, COLOR_PAIR, LINE_WIDTH) if @selected
       end
     end
 
@@ -483,8 +485,8 @@ module OclJoints
     def _draw_preview(view)
       p = @preview
       p[:points].each do |point|
-        _draw_component(view, p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), COLOR_EDGE_PART, 2)
-        _draw_component(view, p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), COLOR_FACE_PART, 2)
+        _draw_component(view, p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), COLOR_EDGE_PART, LINE_WIDTH)
+        _draw_component(view, p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), COLOR_FACE_PART, LINE_WIDTH)
       end
       view.draw_points(p[:points].map { |pt| Geom::Point3d.new(*pt) }, 8, 3, COLOR_PART_HIGHLIGHTED)
     end
