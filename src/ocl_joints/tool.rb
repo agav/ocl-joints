@@ -60,9 +60,7 @@ module OclJoints
         @preview = nil
       elsif @mode == :place && @first
         _reset
-      elsif @mode == :edit && @selected
-        @selected = nil
-      else
+      else   # edit mode, or nothing selected in place mode
         @model.select_tool(nil)
         return
       end
@@ -302,10 +300,11 @@ module OclJoints
       p = @preview
       row = _row
       @model.start_operation('Add joints', true)
-      p[:points].each do |point|
+      pairs = p[:points].map do |point|
         id = Scene.new_pair_id
-        Scene.add(p[:edge_panel], p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), id, 'edge', row[:name])
-        Scene.add(p[:face_panel], p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), id, 'face', row[:name])
+        edge = Scene.add(p[:edge_panel], p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), id, 'edge', row[:name])
+        face = Scene.add(p[:face_panel], p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), id, 'face', row[:name])
+        Scene::Pair.new(id, row[:name], Scene::Part.new(p[:edge_panel], edge), Scene::Part.new(p[:face_panel], face))
       end
       @model.commit_operation
 
@@ -321,11 +320,10 @@ module OclJoints
       unless shared.empty?
         @note += ' Also in other instances: ' + shared.map { |d| "#{d.name} (#{d.instances.length})" }.join(', ') + '.'
       end
-      @preview = nil
-      # back to the Select tool; the result stays in the status bar
-      note = @note
-      @model.select_tool(nil)
-      UI.start_timer(0, false) { Sketchup.status_text = note }
+      # edit mode with the last pair selected: move it or erase it immediately
+      _reset
+      @mode = :edit
+      @selected = pairs.last
     end
 
     def _features(definition)
@@ -465,9 +463,9 @@ module OclJoints
                  'Select a panel. Left/Right or keys 1-9: connector.'
                end
              elsif @selected
-               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase.'
+               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase. Esc: exit.'
              else
-               'Select a placed pair.'
+               'Select a placed pair. Esc: exit.'
              end
       Sketchup.status_text = [ connector, text, @note ].compact.join(' ')
       return unless @mode == :edit && @selected && (contact = _selected_contact)

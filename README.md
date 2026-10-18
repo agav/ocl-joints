@@ -32,6 +32,8 @@ For development, copy `tools/dev_loader.rb` into the SketchUp `Plugins` folder. 
    - **Shift + arrow**: turn the face component 90°.
    - **Right** or **Up** turns in one direction, **Left** or **Down** turns in the other direction.
 6. Push **Enter** or click to add the components. Push **Esc** to cancel.
+7. The tool goes to edit mode. The last added pair is selected: you can move it or erase it immediately (see [Edit joints](#edit-joints)).
+   Push **Esc** to exit the tool.
 
 To select the connector:
 
@@ -80,6 +82,7 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 4. Drag to move the pair along the edge. The pair snaps to guide-line crossings and to the edge middle.
 5. To set an exact position, type a distance. The distance is from the nearest end of the contact.
 6. To erase the pair, push **Delete** or right-click **Erase pair**.
+7. Push **Esc** to exit the tool. Click an empty area to clear the selection.
 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
 The tool uses them to find the other component of the pair.
