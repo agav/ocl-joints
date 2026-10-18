@@ -1,0 +1,454 @@
+module OclJoints
+
+  # Interactive tool.
+  #   place mode: select a panel, then a connected panel; the tool shows the component pairs,
+  #               arrows turn them, Enter or click adds them.
+  #   edit mode:  select a placed pair, drag it along the edge or type a distance, Delete erases it.
+  # Tab changes the mode.
+  class JointTool
+
+    # Same colors as OpenCutList's part highlight
+    COLOR_PART = Sketchup::Color.new(254, 222, 11, 200)
+    COLOR_PART_HIGHLIGHTED = Sketchup::Color.new(254, 222, 11, 255)
+    COLOR_CANDIDATE = Sketchup::Color.new(254, 222, 11, 120)
+    COLOR_EDGE_PART = Sketchup::Color.new(0, 90, 255)
+    COLOR_FACE_PART = Sketchup::Color.new(230, 30, 30)
+    COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
+
+    KEY_BACKSPACE = 8
+    KEY_TAB = 9
+    KEY_DELETE = 46
+    SNAP = 3.0 / 25.4      # drag snaps to guide crossings and the edge middle closer than this
+    PICK_APERTURE = 6
+
+    def initialize(mode = :place)
+      @mode = mode
+    end
+
+    def activate
+      @model = Sketchup.active_model
+      _refresh
+      _reset
+      @note = @model.active_path ? 'Close the open group or component for correct results.' : nil
+      _status
+    end
+
+    def deactivate(view)
+      view.invalidate
+    end
+
+    def resume(view)
+      _status
+      view.invalidate
+    end
+
+    def enableVCB?
+      @mode == :edit && !@selected.nil?
+    end
+
+    def getExtents
+      @model.bounds
+    end
+
+    def onCancel(reason, view)
+      if reason == 2   # undo: the model changed
+        _refresh
+        _reset
+      elsif @mode == :place && @preview
+        @preview = nil
+      elsif @mode == :place && @first
+        _reset
+      elsif @mode == :edit && @selected
+        @selected = nil
+      else
+        @model.select_tool(nil)
+        return
+      end
+      _status
+      view.invalidate
+    end
+
+    def onMouseMove(flags, x, y, view)
+      if @mode == :place
+        @hover = @preview ? nil : _pick_panel(view, x, y)
+      elsif @drag
+        _drag(view, x, y)
+      else
+        @hover_pair = _pick_pair(view, x, y)
+      end
+      view.invalidate
+    end
+
+    def onLButtonDown(flags, x, y, view)
+      if @mode == :place
+        _place_click(view, x, y)
+      else
+        @selected = _pick_pair(view, x, y)
+        _start_drag(x, y) if @selected
+      end
+      _status
+      view.invalidate
+    end
+
+    def onLButtonUp(flags, x, y, view)
+      return unless @drag
+      @model.commit_operation if @drag[:moved]
+      @drag = nil
+      _status
+      view.invalidate
+    end
+
+    def onReturn(view)
+      _commit if @mode == :place && @preview
+      _status
+      view.invalidate
+    end
+
+    def onKeyDown(key, repeat, flags, view)
+      handled = true
+      rows = OclJoints.config[:rows]
+      if key == KEY_TAB
+        @mode = @mode == :place ? :edit : :place
+        _reset
+      elsif (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
+        _select_row((key - 1) % 48 % 9)
+      elsif @mode == :place && @preview && [ VK_LEFT, VK_RIGHT ].include?(key)
+        @preview[:ke] = Joint.next_option(@preview[:edge_options], @preview[:ke], key == VK_RIGHT ? 1 : -1)
+      elsif @mode == :place && @preview && [ VK_UP, VK_DOWN ].include?(key)
+        @preview[:kf] = Joint.next_option(@preview[:face_options], @preview[:kf], key == VK_UP ? 1 : -1)
+      elsif @mode == :edit && @selected && [ KEY_DELETE, KEY_BACKSPACE ].include?(key)
+        _erase
+      else
+        handled = false
+      end
+      if handled
+        _status
+        view.invalidate
+      end
+      handled
+    end
+
+    def onUserText(text, view)
+      return unless @mode == :edit && @selected
+      contact = _selected_contact
+      return if contact.nil?
+      begin
+        distance = text.to_l.to_f
+      rescue ArgumentError
+        UI.beep
+        return
+      end
+      l0, l1 = contact.segment
+      l = _selected_l(contact)
+      target = (l - l0 <= l1 - l ? l0 + distance : l1 - distance).clamp(l0, l1)
+      @model.start_operation('Move joint', true)
+      _move_selected(contact, target - l)
+      @model.commit_operation
+      _status
+      view.invalidate
+    end
+
+    def getMenu(menu, flags, x, y, view)
+      OclJoints.config[:rows].each_with_index do |row, i|
+        item = menu.add_item("#{i + 1}. #{row[:name]}") { _select_row(i); _status; view.invalidate }
+        menu.set_validation_proc(item) { i == _row_index ? MF_CHECKED : MF_ENABLED }
+      end
+      menu.add_separator
+      if @mode == :edit && @selected
+        menu.add_item('Erase pair') { _erase; _status; view.invalidate }
+      end
+      menu.add_item(@mode == :place ? 'Edit mode (Tab)' : 'Place mode (Tab)') do
+        @mode = @mode == :place ? :edit : :place
+        _reset
+        _status
+        view.invalidate
+      end
+      menu.add_item('Settings...') { OclJoints.show_settings }
+      true
+    end
+
+    def draw(view)
+      if @mode == :place
+        if @first && !@preview
+          @candidates.each_value { |c| _draw_panel(view, c[:panel], COLOR_CANDIDATE) }
+        end
+        _draw_panel(view, @first, COLOR_PART) if @first
+        if @preview
+          other = @preview[:edge_panel].key == @first.key ? @preview[:face_panel] : @preview[:edge_panel]
+          _draw_panel(view, other, COLOR_PART)
+          _draw_preview(view)
+        elsif @hover && (@first.nil? || @hover.key != @first.key)
+          _draw_panel(view, @hover, COLOR_PART_HIGHLIGHTED)
+        end
+      else
+        _draw_pair(view, @hover_pair, COLOR_CANDIDATE, 2) if @hover_pair && @hover_pair != @selected
+        _draw_pair(view, @selected, COLOR_PAIR, 3) if @selected
+      end
+    end
+
+    private
+
+    def _refresh
+      @panels = Scene.panels(@model)
+      @panel_by_key = @panels.to_h { |p| [ p.key, p ] }
+      @triangles = {}
+      @lines = {}
+      @features = {}
+      @pairs = {}
+    end
+
+    def _reset
+      @hover = nil
+      @first = nil
+      @candidates = {}
+      @preview = nil
+      @hover_pair = nil
+      @selected = nil
+      @drag = nil
+    end
+
+    def _row_index
+      OclJoints.row_index.clamp(0, [ OclJoints.config[:rows].length - 1, 0 ].max)
+    end
+
+    def _row
+      OclJoints.config[:rows][_row_index]
+    end
+
+    def _select_row(i)
+      OclJoints.row_index = i
+      _build_preview(@preview[:edge_panel], @preview[:face_panel], @preview[:contact]) if @preview
+    end
+
+    # --- place mode ---
+
+    def _place_click(view, x, y)
+      return _commit if @preview
+      panel = _pick_panel(view, x, y)
+      if panel.nil?
+        _reset
+      elsif @first && (candidate = @candidates[panel.key])
+        edge_panel, face_panel = candidate[:first_is_edge] ? [ @first, panel ] : [ panel, @first ]
+        _build_preview(edge_panel, face_panel, candidate[:contact])
+      elsif @first.nil? || panel.key != @first.key
+        _set_first(panel)
+      end
+    end
+
+    def _set_first(panel)
+      _reset
+      @first = panel
+      @panels.each do |p|
+        next if p.key == panel.key
+        contact, first_is_edge = Joint.joint(panel.box, p.box)
+        @candidates[p.key] = { panel: p, contact: contact, first_is_edge: first_is_edge } if contact
+      end
+    end
+
+    def _build_preview(edge_panel, face_panel, contact)
+      @preview = nil
+      row = _row
+      if row.nil?
+        @note = 'The connector table is empty. Open Settings.'
+        return
+      end
+      library = OclJoints.config[:library]
+      @model.start_operation('Load joint components', true)
+      edge_def = Scene.definition(@model, row[:edge], library)
+      face_def = Scene.definition(@model, row[:face], library)
+      @model.commit_operation
+      missing = [ [ row[:edge], edge_def ], [ row[:face], face_def ] ].reject { |_, d| d }.map(&:first)
+      unless missing.empty?
+        @note = "Component not found: #{missing.join(', ')}. Add it to the model or to a library folder."
+        return
+      end
+
+      positions = Joint.positions(contact, Scene.guides(@model, [ edge_panel, face_panel ]))
+      points = positions.map { |l| Joint.joint_point(contact, l) }
+      prediction = Joint.predict(contact, points.first, edge_panel.box, _features(edge_def),
+                                 face_panel.box, _features(face_def), row[:learned])
+      @preview = { edge_panel: edge_panel, face_panel: face_panel, contact: contact, points: points,
+                   edge_def: edge_def, face_def: face_def, frames: Joint.frames(contact),
+                   ke: prediction[:edge], kf: prediction[:face],
+                   edge_options: prediction[:edge_options], face_options: prediction[:face_options] }
+      @note = nil
+    end
+
+    def _commit
+      p = @preview
+      row = _row
+      @model.start_operation('Add joints', true)
+      p[:points].each do |point|
+        id = Scene.new_pair_id
+        Scene.add(p[:edge_panel], p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), id, 'edge', row[:name])
+        Scene.add(p[:face_panel], p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), id, 'face', row[:name])
+      end
+      @model.commit_operation
+
+      # learn the turns only when the inner side is known: they are relative to it
+      if p[:contact].inner
+        config = OclJoints.config
+        config[:rows][_row_index] = row.merge(learned: { edge: p[:ke], face: p[:kf] })
+        OclJoints.save_config(config)
+      end
+
+      shared = [ p[:edge_panel], p[:face_panel] ].map(&:definition).uniq.select { |d| d.instances.length > 1 }
+      @note = "#{p[:points].length} pair(s) added."
+      unless shared.empty?
+        @note += ' Also in other instances: ' + shared.map { |d| "#{d.name} (#{d.instances.length})" }.join(', ') + '.'
+      end
+      @preview = nil
+    end
+
+    def _features(definition)
+      @features[definition] ||= Scene.feature_points(definition)
+    end
+
+    # --- edit mode ---
+
+    def _start_drag(x, y)
+      contact = _selected_contact
+      return if contact.nil?
+      guides = Scene.guides(@model, [ @selected.edge.panel, @selected.face.panel ])
+      snaps = Joint.positions(contact, guides) + [ contact.segment.sum / 2.0 ]
+      @drag = { contact: contact, l: _selected_l(contact), snaps: snaps, moved: false }
+    end
+
+    def _drag(view, x, y)
+      contact = @drag[:contact]
+      ray = view.pickray(x, y)
+      l = Joint.nearest_l(contact, ray[0].to_a, ray[1].to_a).clamp(*contact.segment)
+      snap = @drag[:snaps].min_by { |s| (s - l).abs }
+      l = snap if snap && (snap - l).abs < SNAP
+      delta = l - @drag[:l]
+      return if delta.abs < 1e-6
+      unless @drag[:moved]
+        @model.start_operation('Move joint', true)
+        @drag[:moved] = true
+      end
+      _move_selected(contact, delta)
+      @drag[:l] = l
+      _status
+    end
+
+    def _move_selected(contact, delta)
+      vector = Joint.mul(contact.l_axis, delta)
+      Scene.move(@selected.edge, vector)
+      Scene.move(@selected.face, vector)
+    end
+
+    def _selected_contact
+      Joint.contact(@selected.edge.panel.box, @selected.face.panel.box)
+    end
+
+    def _selected_l(contact)
+      Joint.dot(Joint.sub(@selected.edge.transformation.origin.to_a, contact.corner), contact.l_axis)
+    end
+
+    def _erase
+      @model.start_operation('Erase joint', true)
+      [ @selected.edge, @selected.face ].each { |part| part.instance.erase! if part.instance.valid? }
+      @model.commit_operation
+      @pairs = {}
+      @selected = nil
+      @hover_pair = nil
+      @note = 'Pair erased.'
+    end
+
+    # --- picking ---
+
+    def _pick_panel(view, x, y)
+      _picked_paths(view, x, y).each do |full|
+        (1..full.length).each do |n|
+          panel = @panel_by_key[full[0...n].map(&:entityID).join('/')]
+          return panel if panel
+        end
+      end
+      nil
+    end
+
+    def _pick_pair(view, x, y)
+      _picked_paths(view, x, y).each do |full|
+        j = full.index { |e| e.is_a?(Sketchup::ComponentInstance) && e.get_attribute(Scene::DICTIONARY, 'pair_id') }
+        next if j.nil?
+        panel = @panel_by_key[full[0...j].map(&:entityID).join('/')]
+        next if panel.nil?
+        key = "#{panel.key}/#{full[j].entityID}"
+        @pairs[key] = Scene.pair(@panels, panel, full[j]) unless @pairs.key?(key)
+        return @pairs[key] if @pairs[key]
+      end
+      nil
+    end
+
+    # Full paths from the model root at the cursor; paths of the best face first
+    def _picked_paths(view, x, y)
+      ph = view.pick_helper(x, y, PICK_APERTURE)
+      active = @model.active_path || []
+      face = ph.picked_face
+      paths = (0...ph.count).map { |i| [ ph.leaf_at(i) == face && face ? 0 : 1, active + ph.path_at(i).to_a ] }
+      paths.sort_by(&:first).map(&:last)
+    end
+
+    # --- drawing ---
+
+    def _draw_panel(view, panel, color)
+      points = @triangles[panel.key] ||= Scene.triangles(panel.definition).map { |p| p.transform(panel.transformation) }
+      return if points.empty?
+      view.drawing_color = color
+      view.draw(GL_TRIANGLES, points)
+    end
+
+    # Preview components are inside the panels, so they are drawn over the model (2D)
+    def _draw_preview(view)
+      p = @preview
+      p[:points].each do |point|
+        _draw_component(view, p[:edge_def], Scene.world_transformation(point, p[:frames][:edge], p[:ke]), COLOR_EDGE_PART, 2)
+        _draw_component(view, p[:face_def], Scene.world_transformation(point, p[:frames][:face], p[:kf]), COLOR_FACE_PART, 2)
+      end
+      view.draw_points(p[:points].map { |pt| Geom::Point3d.new(*pt) }, 8, 3, COLOR_PART_HIGHLIGHTED)
+    end
+
+    def _draw_pair(view, pair, color, width)
+      [ pair.edge, pair.face ].each do |part|
+        next unless part.instance.valid?
+        _draw_component(view, part.instance.definition, part.transformation, color, width)
+      end
+    end
+
+    def _draw_component(view, definition, transformation, color, width)
+      points = @lines[definition] ||= Scene.lines(definition)
+      return if points.empty?
+      view.line_width = width
+      view.drawing_color = color
+      view.draw2d(GL_LINES, points.map { |pt| view.screen_coords(pt.transform(transformation)) })
+    end
+
+    # --- status bar ---
+
+    def _status
+      row = _row
+      connector = row ? "Connector #{_row_index + 1}: #{row[:name]}." : 'No connectors.'
+      text = if @mode == :place
+               if @preview
+                 "#{@preview[:points].length} pair(s). Left/Right: turn edge part. Up/Down: turn face part. Enter or click: add. Esc: cancel."
+               elsif @first
+                 "Select a connected panel (#{@candidates.length} found). Esc: cancel."
+               else
+                 'Select a panel. Keys 1-9: connector. Tab: edit mode.'
+               end
+             elsif @selected
+               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase. Tab: place mode.'
+             else
+               'Select a placed pair. Tab: place mode.'
+             end
+      Sketchup.status_text = [ connector, text, @note ].compact.join(' ')
+      return unless @mode == :edit && @selected && (contact = _selected_contact)
+      l0, l1 = contact.segment
+      l = _selected_l(contact)
+      Sketchup.vcb_label = 'Distance'
+      Sketchup.vcb_value = Sketchup.format_length([ l - l0, l1 - l ].min)
+    end
+
+  end
+
+end
