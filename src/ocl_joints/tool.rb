@@ -4,7 +4,8 @@ module OclJoints
   #   place mode: select a panel, then a connected panel; the tool shows the component pairs,
   #               arrows turn them, Enter or click adds them.
   #   edit mode:  select a placed pair, drag it along the edge or type a distance, Delete erases it.
-  # In place mode Tab / Shift+Tab select the next / previous connector; in edit mode Tab returns to place mode.
+  # Place mode keys: Left / Right select the previous / next connector, Alt + arrows turn the edge
+  # component, Shift + arrows turn the face component.
   class JointTool
 
     # Same colors as OpenCutList's part highlight
@@ -16,9 +17,9 @@ module OclJoints
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
 
     KEY_BACKSPACE = 8
-    KEY_TAB = 9
     KEY_DELETE = 46
-    OWN_KEYS = [ KEY_TAB, VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN ].freeze
+    KEY_ALT = 18
+    ARROWS = [ VK_LEFT, VK_RIGHT, VK_UP, VK_DOWN ].freeze
     SNAP = 3.0 / 25.4      # drag snaps to guide crossings and the edge middle closer than this
     PICK_APERTURE = 6
 
@@ -70,6 +71,9 @@ module OclJoints
     end
 
     def onMouseMove(flags, x, y, view)
+      # mouse flags have reliable modifier states: they correct a missed key up
+      @shift = (flags & CONSTRAIN_MODIFIER_MASK) != 0
+      @alt = (flags & ALT_MODIFIER_MASK) != 0
       if @mode == :place
         @hover = @preview ? nil : _pick_panel(view, x, y)
       elsif @drag
@@ -105,25 +109,30 @@ module OclJoints
       view.invalidate
     end
 
-    # Tab and the arrow keys always belong to the tool: true on key down and on key up stops
-    # SketchUp from using them too (camera and focus navigation).
+    # The arrow keys always belong to the tool: true on key down and on key up stops SketchUp from
+    # using them too (camera navigation).
     def onKeyDown(key, repeat, flags, view)
       handled = true
       rows = OclJoints.config[:rows]
       if key == VK_SHIFT
         @shift = true
         handled = false
-      elsif key == KEY_TAB && @mode == :place
-        _select_row((_row_index + (@shift ? -1 : 1)) % rows.length) unless rows.empty?
-      elsif key == KEY_TAB
-        @mode = :place
-        _reset
+      elsif key == KEY_ALT
+        @alt = true
+        handled = false
+      elsif @mode == :place && ARROWS.include?(key)
+        step = [ VK_RIGHT, VK_UP ].include?(key) ? 1 : -1
+        if @alt || @shift
+          if @preview && @alt
+            @preview[:ke] = Joint.next_option(@preview[:edge_options], @preview[:ke], step)
+          elsif @preview
+            @preview[:kf] = Joint.next_option(@preview[:face_options], @preview[:kf], step)
+          end
+        elsif [ VK_LEFT, VK_RIGHT ].include?(key) && !rows.empty?
+          _select_row((_row_index + step) % rows.length)
+        end
       elsif @mode == :place && (key.between?(49, 57) || key.between?(97, 105)) && (key - 1) % 48 % 9 < rows.length
         _select_row((key - 1) % 48 % 9)
-      elsif @mode == :place && @preview && [ VK_LEFT, VK_RIGHT ].include?(key)
-        @preview[:ke] = Joint.next_option(@preview[:edge_options], @preview[:ke], key == VK_RIGHT ? 1 : -1)
-      elsif @mode == :place && @preview && [ VK_UP, VK_DOWN ].include?(key)
-        @preview[:kf] = Joint.next_option(@preview[:face_options], @preview[:kf], key == VK_UP ? 1 : -1)
       elsif @mode == :edit && @selected && [ KEY_DELETE, KEY_BACKSPACE ].include?(key)
         _erase
       else
@@ -133,12 +142,14 @@ module OclJoints
         _status
         view.invalidate
       end
-      handled || OWN_KEYS.include?(key)
+      handled || ARROWS.include?(key)
     end
 
     def onKeyUp(key, repeat, flags, view)
       @shift = false if key == VK_SHIFT
-      OWN_KEYS.include?(key) || (@mode == :place && (key.between?(49, 57) || key.between?(97, 105)))
+      @alt = false if key == KEY_ALT
+      # Alt is kept too, so its release does not open the menu bar
+      ARROWS.include?(key) || key == KEY_ALT || (@mode == :place && (key.between?(49, 57) || key.between?(97, 105)))
     end
 
     def onUserText(text, view)
@@ -170,7 +181,7 @@ module OclJoints
       if @mode == :edit && @selected
         menu.add_item('Erase pair') { _erase; _status; view.invalidate }
       end
-      menu.add_item(@mode == :place ? 'Edit mode' : 'Place mode (Tab)') do
+      menu.add_item(@mode == :place ? 'Edit mode' : 'Place mode') do
         @mode = @mode == :place ? :edit : :place
         _reset
         _status
@@ -447,16 +458,16 @@ module OclJoints
       connector = row ? "Connector #{_row_index + 1}: #{row[:name]}." : 'No connectors.'
       text = if @mode == :place
                if @preview
-                 "#{@preview[:points].length} pair(s). Tab: next connector. Left/Right: turn edge part. Up/Down: turn face part. Enter or click: add. Esc: cancel."
+                 "#{@preview[:points].length} pair(s). Left/Right: connector. Alt+arrows: turn edge part. Shift+arrows: turn face part. Enter or click: add. Esc: cancel."
                elsif @first
-                 "Select a connected panel (#{@candidates.length} found). Tab: next connector. Esc: cancel."
+                 "Select a connected panel (#{@candidates.length} found). Left/Right: connector. Esc: cancel."
                else
-                 'Select a panel. Tab / Shift+Tab or keys 1-9: connector.'
+                 'Select a panel. Left/Right or keys 1-9: connector.'
                end
              elsif @selected
-               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase. Tab: place mode.'
+               'Drag: move along the edge. Type a distance from the nearest end. Delete: erase.'
              else
-               'Select a placed pair. Tab: place mode.'
+               'Select a placed pair.'
              end
       Sketchup.status_text = [ connector, text, @note ].compact.join(' ')
       return unless @mode == :edit && @selected && (contact = _selected_contact)
