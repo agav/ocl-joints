@@ -98,29 +98,17 @@ module OclJoints
       end
     end
 
-    # Triangles [p1, p2, p3, ...] of a definition, in definition space
-    def triangles(definition, with_features = false)
-      points = []
-      _each_face(definition.entities, nil, with_features) do |face, t|
-        mesh = face.mesh(0)
-        mesh.polygons.each do |polygon|
-          polygon.each do |i|
-            p = mesh.point_at(i.abs)
-            points << (t ? p.transform(t) : p)
-          end
-        end
-      end
-      points
-    end
-
     # Edge segments [p1, p2, ...] of a definition and everything inside it, in definition space
-    def lines(definition, transformation = nil, points = [])
+    # with_features: false skips f_ / g_ subtrees (panel geometry only)
+    def lines(definition, transformation = nil, points = [], with_features: true)
       definition.entities.each do |e|
         if e.is_a?(Sketchup::Edge)
-          next unless e.visible?
+          next unless e.visible? && e.layer.visible?
           [ e.start.position, e.end.position ].each { |p| points << (transformation ? p.transform(transformation) : p) }
-        elsif e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance)
-          lines(e.definition, transformation ? transformation * e.transformation : e.transformation, points)
+        elsif (e.is_a?(Sketchup::Group) || e.is_a?(Sketchup::ComponentInstance)) && e.visible?
+          next if !with_features && feature?(e)
+          lines(e.definition, transformation ? transformation * e.transformation : e.transformation, points,
+                with_features: with_features)
         end
       end
       points

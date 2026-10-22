@@ -15,10 +15,12 @@ module OclJoints
   # Left / Right select the 2-panel connector, Up / Down the 3-panel connector.
   class JointTool
 
-    # Same colors as OpenCutList's part highlight
-    COLOR_PART = Sketchup::Color.new(254, 222, 11, 200)
-    COLOR_PART_HIGHLIGHTED = Sketchup::Color.new(254, 222, 11, 255)
-    COLOR_CANDIDATE = Sketchup::Color.new(254, 222, 11, 120)
+    # Panels: edges only, dark yellow; the line width and stipple show the state
+    COLOR_PANEL = Sketchup::Color.new(190, 150, 0)
+    PANEL_HOVER = [ 3, '' ].freeze        # [ width, stipple ]
+    PANEL_SELECTED = [ 2, '' ].freeze
+    PANEL_CANDIDATE = [ 1, '-' ].freeze
+    COLOR_CANDIDATE = Sketchup::Color.new(254, 222, 11, 120)   # joint under the cursor
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
     COLOR_SNAP_LINE = Sketchup::Color.new(120, 120, 120)
     LINE_WIDTH = 1
@@ -239,10 +241,10 @@ module OclJoints
     def draw(view)
       if _panel_mode?
         candidates = @second ? @thirds : (@first ? @candidates : {})
-        candidates.each_value { |c| _draw_panel(view, c[:panel], COLOR_CANDIDATE) }
-        _draw_panel(view, @first, COLOR_PART) if @first
-        _draw_panel(view, @second[:panel], COLOR_PART) if @second
-        _draw_panel(view, @hover, COLOR_PART_HIGHLIGHTED) if @hover && !_selected_panel?(@hover)
+        candidates.each_value { |c| _draw_panel(view, c[:panel], PANEL_CANDIDATE) }
+        _draw_panel(view, @first, PANEL_SELECTED) if @first
+        _draw_panel(view, @second[:panel], PANEL_SELECTED) if @second
+        _draw_panel(view, @hover, PANEL_HOVER) if @hover && !_selected_panel?(@hover)
       elsif @hover_pair && @hover_pair != @selected
         _draw_pair(view, @hover_pair, COLOR_CANDIDATE, LINE_WIDTH)
       end
@@ -260,7 +262,7 @@ module OclJoints
     def _refresh
       @panels = Scene.panels(@model)
       @panel_by_key = @panels.to_h { |p| [ p.key, p ] }
-      @triangles = {}
+      @panel_lines = {}
       @lines = {}
       @features = {}
       @pairs = {}
@@ -671,11 +673,14 @@ module OclJoints
 
     # --- drawing ---
 
-    def _draw_panel(view, panel, color)
-      points = @triangles[panel.key] ||= Scene.triangles(panel.definition).map { |p| p.transform(panel.transformation) }
+    def _draw_panel(view, panel, style)
+      points = @panel_lines[panel.key] ||=
+        Scene.lines(panel.definition, with_features: false).map { |p| p.transform(panel.transformation) }
       return if points.empty?
-      view.drawing_color = color
-      view.draw(GL_TRIANGLES, points)
+      view.line_width, view.line_stipple = style
+      view.drawing_color = COLOR_PANEL
+      view.draw(GL_LINES, points)
+      view.line_stipple = ''
     end
 
     def _draw_pair(view, pair, color, width)
