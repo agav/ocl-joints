@@ -110,6 +110,9 @@ module OclJoints
       else
         _panel_click(view, x, y)
       end
+      # SketchUp's Edit > Delete takes the Delete key before the tool when its selection is not
+      # empty: clear it, so Delete erases the selected joint
+      @model.selection.clear if @selected && !@model.selection.empty?
       _status
       view.invalidate
     end

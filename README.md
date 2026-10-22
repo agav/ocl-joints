@@ -83,6 +83,7 @@ The joint uses the current connector of its table. The status bar shows both cur
      first, second, first, second. With two possible turns (for example minifix), four pushes bring the joint back.
    - **Shift + arrow**: turn the face component 90°.
 7. To erase the joint, push **Delete** or right-click **Erase joint**.
+   When a joint becomes selected, the tool clears the SketchUp selection: SketchUp would erase that selection with **Delete**.
 8. Push **Esc** to exit the tool. Click an empty area to clear the selection.
 
 Each placed component has the attributes `ocl_joints / pair_id`, `role` (`edge` or `face`) and `row`.
