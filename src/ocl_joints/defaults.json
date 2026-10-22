@@ -1,0 +1,63 @@
+{
+  "library": [
+
+  ],
+  "rows": [
+    {
+      "name": "minifix",
+      "face": "f_d5x11.5",
+      "edge": "g_minifix-edge",
+      "learned": {
+        "edge": 1,
+        "face": 2
+      }
+    },
+    {
+      "name": "minifix + dowels",
+      "face": "g_minifix_shkant_front",
+      "edge": "g_minifx_shkant_edge",
+      "learned": {
+        "edge": 0,
+        "face": 2
+      }
+    },
+    {
+      "name": "confirmat",
+      "face": "g_confirmat-zenker",
+      "edge": "f_d4.5x34",
+      "learned": {
+        "edge": 0,
+        "face": 0
+      }
+    },
+    {
+      "name": "dowel 8",
+      "face": "f_d8x12",
+      "edge": "f_d8.5x25",
+      "learned": {
+        "edge": 1,
+        "face": 3
+      }
+    },
+    {
+      "name": "rafix",
+      "face": "f_d5x11.5",
+      "edge": "g_rafix-edge",
+      "learned": {
+        "edge": 3,
+        "face": 0
+      }
+    }
+  ],
+  "triples": [
+    {
+      "name": "minifix3",
+      "face": "f_d5xF",
+      "edge": "g_minifix-edge",
+      "learned": {
+        "edge": 3,
+        "face": 0
+      }
+    }
+  ]
+}
