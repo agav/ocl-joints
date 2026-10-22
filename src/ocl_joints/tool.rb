@@ -117,6 +117,12 @@ module OclJoints
       view.invalidate
     end
 
+    # SketchUp sends the second click of a double-click only here: it is a normal click
+    # (example: the second panel clicked twice makes a 2-panel joint)
+    def onLButtonDoubleClick(flags, x, y, view)
+      onLButtonDown(flags, x, y, view)
+    end
+
     def onLButtonUp(flags, x, y, view)
       return unless @drag
       if @drag[:moved]

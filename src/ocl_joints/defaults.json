@@ -8,7 +8,7 @@
       "face": "f_d5x11.5",
       "edge": "g_minifix-edge",
       "learned": {
-        "edge": 1,
+        "edge": 3,
         "face": 2
       }
     },
@@ -44,7 +44,7 @@
       "face": "f_d5x11.5",
       "edge": "g_rafix-edge",
       "learned": {
-        "edge": 3,
+        "edge": 1,
         "face": 0
       }
     }
@@ -52,7 +52,7 @@
   "triples": [
     {
       "name": "minifix3",
-      "face": "f_d5xF",
+      "face": "f_d8xF",
       "edge": "g_minifix-edge",
       "learned": {
         "edge": 3,
