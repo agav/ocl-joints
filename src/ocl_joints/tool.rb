@@ -1,13 +1,13 @@
 module OclJoints
 
-  # Interactive tool, one mode:
-  #   - select a placed joint, drag it along the edge (snaps to points) or type a distance;
+  # Interactive tool, one mode. Under the cursor a placed joint has priority, then a panel that
+  # connects to another panel.
+  #   - click a joint: select it, drag it along the edge (snaps to points) or type a distance;
   #     Delete erases it, Ctrl (tap) switches copy on and off as in SketchUp's Move tool
-  #   - hold Alt and click panels:
-  #       1 panel, then Alt released: nothing
-  #       2 connected panels, then Alt released: a 2-panel joint (connector of the 2-panel table)
-  #       3rd panel on the other face of the central panel, same axis: a 3-panel joint at once
-  #         (connector of the 3-panel table)
+  #   - click a panel, then a connected panel:
+  #       no possible third panel: a 2-panel joint at once (connector of the 2-panel table)
+  #       else click the second panel again: a 2-panel joint, or click a third panel on the other
+  #       face of the central panel, same axis: a 3-panel joint (connector of the 3-panel table)
   #     the new joint is in the middle of the contact and becomes the selected joint
   # Arrow keys on the selected joint: Left / Right other connector of its table, Alt + arrows turn
   # the edge component (3-panel joint: the two edge components in turn, first, second, first, ...),
@@ -15,8 +15,8 @@ module OclJoints
   # Left / Right select the 2-panel connector, Up / Down the 3-panel connector.
   class JointTool
 
-    # Panels: edges only, dark yellow; the line width and stipple show the state
-    COLOR_PANEL = Sketchup::Color.new(190, 150, 0)
+    # Panels: edges only, OpenCutList's yellow; the line width and stipple show the state
+    COLOR_PANEL = Sketchup::Color.new(254, 222, 11)
     PANEL_HOVER = [ 3, '' ].freeze        # [ width, stipple ]
     PANEL_SELECTED = [ 2, '' ].freeze
     PANEL_CANDIDATE = [ 1, '-' ].freeze
@@ -50,7 +50,8 @@ module OclJoints
     end
 
     def onSetCursor
-      UI.set_cursor(JointTool.cursor(_panel_mode? ? 'place' : (@copy ? 'copy' : 'edit')))
+      panels = @first || (@hover && @hover_pair.nil? && @selected.nil?)
+      UI.set_cursor(JointTool.cursor(panels ? 'place' : (@copy ? 'copy' : 'edit')))
     end
 
     def deactivate(view)
@@ -89,22 +90,25 @@ module OclJoints
       @shift = (flags & CONSTRAIN_MODIFIER_MASK) != 0
       if @drag
         _drag(view, x, y)
-      elsif _panel_mode?
+      elsif @first
+        # panel selection: joints are not picked
         @hover = _pick_panel(view, x, y)
         @hover_pair = nil
       else
-        @hover = nil
         @hover_pair = _pick_pair(view, x, y)
+        @hover = @hover_pair ? nil : _pick_panel(view, x, y)
+        @hover = nil if @hover && !_joinable?(@hover)
       end
       view.invalidate
     end
 
     def onLButtonDown(flags, x, y, view)
-      if _panel_mode?
-        _panel_click(view, x, y)
+      pair = @first ? nil : _pick_pair(view, x, y)
+      if pair
+        @selected = pair
+        _start_drag(x, y)
       else
-        @selected = _pick_pair(view, x, y)
-        _start_drag(x, y) if @selected
+        _panel_click(view, x, y)
       end
       _status
       view.invalidate
@@ -131,9 +135,8 @@ module OclJoints
         handled = false
       elsif key == KEY_ALT
         @alt = true
-        @hover_pair = nil
       elsif key == COPY_MODIFIER_KEY
-        _toggle_copy unless @ctrl_down || _panel_mode?
+        _toggle_copy unless @ctrl_down || @first
         @ctrl_down = true
       elsif ARROWS.include?(key)
         step = [ VK_RIGHT, VK_UP ].include?(key) ? 1 : -1
@@ -175,13 +178,7 @@ module OclJoints
     def onKeyUp(key, repeat, flags, view)
       @shift = false if key == VK_SHIFT
       @ctrl_down = false if key == COPY_MODIFIER_KEY
-      if key == KEY_ALT
-        @alt = false
-        _add_pair(@second) if @second
-        _clear_panels
-        _status
-        view.invalidate
-      end
+      @alt = false if key == KEY_ALT
       # Alt is kept too, so its release does not open the menu bar
       ARROWS.include?(key) || key == KEY_ALT
     end
@@ -239,25 +236,19 @@ module OclJoints
     end
 
     def draw(view)
-      if _panel_mode?
-        candidates = @second ? @thirds : (@first ? @candidates : {})
+      if @first
+        candidates = @second ? @thirds : @candidates
         candidates.each_value { |c| _draw_panel(view, c[:panel], PANEL_CANDIDATE) }
-        _draw_panel(view, @first, PANEL_SELECTED) if @first
+        _draw_panel(view, @first, PANEL_SELECTED)
         _draw_panel(view, @second[:panel], PANEL_SELECTED) if @second
-        _draw_panel(view, @hover, PANEL_HOVER) if @hover && !_selected_panel?(@hover)
-      elsif @hover_pair && @hover_pair != @selected
-        _draw_pair(view, @hover_pair, COLOR_CANDIDATE, LINE_WIDTH)
       end
+      _draw_panel(view, @hover, PANEL_HOVER) if @hover && !_selected_panel?(@hover) && _clickable?(@hover)
+      _draw_pair(view, @hover_pair, COLOR_CANDIDATE, LINE_WIDTH) if @hover_pair && @hover_pair != @selected
       _draw_pair(view, @selected, COLOR_PAIR, LINE_WIDTH) if @selected
       _draw_snap(view) if @drag
     end
 
     private
-
-    # Panel selection while Alt is held (not during a drag)
-    def _panel_mode?
-      @alt && @drag.nil?
-    end
 
     def _refresh
       @panels = Scene.panels(@model)
@@ -266,6 +257,7 @@ module OclJoints
       @lines = {}
       @features = {}
       @pairs = {}
+      @joinable = {}
     end
 
     def _reset
@@ -282,6 +274,19 @@ module OclJoints
       @second = nil
       @candidates = {}
       @thirds = {}
+    end
+
+    # A panel that connects (edge to face) to at least one other panel
+    def _joinable?(panel)
+      return @joinable[panel.key] if @joinable.key?(panel.key)
+      @joinable[panel.key] = @panels.any? { |p| p.key != panel.key && Joint.joint(panel.box, p.box) }
+    end
+
+    # A click on this panel does something: the second panel again, a candidate, or a new first panel
+    def _clickable?(panel)
+      return true if @first.nil?
+      return @thirds.key?(panel.key) || panel.key == @second[:panel].key if @second
+      @candidates.key?(panel.key) || _joinable?(panel)
     end
 
     def _selected_panel?(panel)
@@ -311,12 +316,22 @@ module OclJoints
       panel = _pick_panel(view, x, y)
       if panel.nil?
         _clear_panels
+        @selected = nil
       elsif @second && (third = @thirds[panel.key])
         _add_triple(@second, third)
         _clear_panels
+      elsif @second && panel.key == @second[:panel].key
+        _add_pair(@second)
+        _clear_panels
       elsif @first && !@second && (candidate = @candidates[panel.key])
         _set_second(panel, candidate)
-      elsif !_selected_panel?(panel)
+        if @thirds.empty? || _row(:triples).nil?
+          _add_pair(@second)
+          _clear_panels
+        end
+      elsif @first && panel.key == @first.key
+        _clear_panels
+      elsif _joinable?(panel)
         _set_first(panel)
       end
     rescue StandardError => e
@@ -335,8 +350,8 @@ module OclJoints
       end
     end
 
-    # Second panel: the 2-panel joint is ready (added when Alt is released); a third panel can
-    # make a 3-panel joint if it touches the other face of the face panel on the same axis
+    # Second panel: a third panel can make a 3-panel joint if it touches the other face of the
+    # face panel on the same axis
     def _set_second(panel, candidate)
       edge_panel, face_panel = candidate[:first_is_edge] ? [ @first, panel ] : [ panel, @first ]
       @second = { panel: panel, edge_panel: edge_panel, face_panel: face_panel, contact: candidate[:contact] }
@@ -720,21 +735,16 @@ module OclJoints
         row = _row(kind)
         "#{TITLES[kind]}: #{row ? row[:name] : 'none'}."
       end.join(' ')
-      text = if _panel_mode?
-               if @second
-                 third = _row(:triples) ? "Select a third panel: 3-panel joint (#{@thirds.length} found)." : 'No 3-panel connectors.'
-                 "Release Alt: 2-panel joint. #{third}"
-               elsif @first
-                 "Select a connected panel (#{@candidates.length} found). Release Alt: cancel."
-               else
-                 'Select a panel. Left/Right: 2-panel connector. Up/Down: 3-panel connector. Release Alt: cancel.'
-               end
+      text = if @second
+               "Click the second panel again: 2-panel joint. Or click a third panel: 3-panel joint (#{@thirds.length} found). Esc: cancel."
+             elsif @first
+               "Select a connected panel (#{@candidates.length} found). Click the panel again or Esc: cancel."
              elsif @selected
                "Drag: #{@copy ? 'copy' : 'move'} along the edge. Ctrl: copy #{@copy ? 'off' : 'on'}. Left/Right: connector. " \
                'Alt+arrows: turn edge part. Shift+arrows: turn face part. Type a distance from the nearest end. ' \
-               'Delete: erase. Hold Alt: new joint. Esc: exit.'
+               'Delete: erase. Click a panel: new joint. Esc: exit.'
              else
-               'Select a joint. Hold Alt and click 2 or 3 panels: new joint. Left/Right, Up/Down: connectors. Esc: exit.'
+               'Click a joint to select it, or click two (three) panels: new joint. Left/Right: 2-panel connector. Up/Down: 3-panel connector. Esc: exit.'
              end
       # the note first: the status bar cuts long texts
       Sketchup.status_text = [ @note, connectors, text ].compact.join(' ')

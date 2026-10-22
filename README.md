@@ -25,18 +25,22 @@ For development, copy `tools/dev_loader.rb` into the SketchUp `Plugins` folder. 
 
 Click **Joints** (toolbar or **Extensions > OCL Joints**). The tool has one mode.
 
+Under the cursor, the tool highlights:
+
+1. a placed joint (it has priority), or
+2. a panel that connects to a different panel (yellow edges).
+
 ### Add a joint
 
-1. Hold **Alt**. The tool highlights the panel under the cursor.
-2. Click a panel. The tool highlights all panels that connect to it.
-3. Click one of the connected panels.
-4. Then do one of these:
-   - **2-panel joint**: release **Alt**. The tool adds the joint.
-   - **3-panel joint**: click a third panel. The tool highlights only the panels that are possible.
-     The tool adds the joint immediately.
-5. The tool selects the new joint. You can move, turn or erase it immediately.
+1. Click a highlighted panel. The tool highlights all panels that connect to it (dashed edges).
+2. Click one of the connected panels.
+   - If no third panel is possible, the tool adds a 2-panel joint immediately.
+   - If a third panel is possible, the tool highlights the possible third panels and waits:
+     - Click the second panel again: the tool adds a 2-panel joint.
+     - Click a third panel: the tool adds a 3-panel joint.
+3. The tool selects the new joint. You can move, turn or erase it immediately.
 
-If you release **Alt** when only one panel is selected, the tool clears the panel and you can select a joint again.
+To cancel the panel selection, push **Esc**, click the first panel again or click an empty area.
 
 A joint goes on the **edge middle line**: the line at half the thickness of the edge panel, in the contact plane.
 The tool uses only the length where the panels touch. The tool puts the joint in the middle of this length.
@@ -119,7 +123,7 @@ The status bar shows these definitions. To drill one panel only, make it unique 
 
 - Select a joint: arrow with a bolt.
 - Copy on: the same, with an orange **+**.
-- Alt held (select panels): arrow with a bolt and a yellow panel corner.
+- Panel under the cursor, or panel selection: arrow with a bolt and a yellow panel corner.
 
 ## Settings
 
