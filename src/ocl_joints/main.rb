@@ -114,9 +114,27 @@ module OclJoints
   end
 
   # Development helper: reload source files without restarting SketchUp.
+  # Loads all source files again, this file too (the menu and toolbar are made only once, so a
+  # new menu item still needs a SketchUp restart), makes the cursors again and restarts an
+  # active Joints tool with the new code.
   def self.reload
+    verbose, $VERBOSE = $VERBOSE, nil   # no "already initialized constant" warnings
     SOURCE_FILES.each { |f| load File.join(PLUGIN_ROOT, "#{f}.rb") }
+    load __FILE__
+    $VERBOSE = verbose
+    JointTool.instance_variable_set(:@cursors, nil)
+    @config = nil   # read config.json again
+    model = Sketchup.active_model
+    tools = model.tools
+    if tools.respond_to?(:active_tool) && tools.active_tool.is_a?(JointTool)
+      model.select_tool(nil)
+      start_tool
+    end
+    Sketchup.status_text = "OCL Joints reloaded (#{Time.now.strftime('%H:%M:%S')})"
     puts 'OCL Joints reloaded'
+  rescue Exception => e   # also SyntaxError, which is not a StandardError
+    $VERBOSE = verbose
+    UI.messagebox("OCL Joints reload failed:\n\n#{e.class}: #{e.message}\n\n#{e.backtrace.first(5).join("\n")}")
   end
 
   unless file_loaded?(__FILE__)

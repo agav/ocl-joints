@@ -19,7 +19,12 @@ The **face component** goes into the face panel. The **edge component** goes int
 2. In SketchUp, open **Extensions > Extension Manager > Install Extension**. Select the `.rbz` file.
 
 For development, copy `tools/dev_loader.rb` into the SketchUp `Plugins` folder. SketchUp then loads the code from
-`C:/prj/ocl-joints`. After a change, select **Extensions > OCL Joints > Reload extension (dev)**.
+`C:/prj/ocl-joints`. After a change, select **Extensions > OCL Joints > Reload extension (dev)**:
+
+- It loads all source files again, makes the cursors again, reads `config.json` again and restarts an active Joints tool.
+- The status bar shows "OCL Joints reloaded" and the time. If a file has an error, a message shows it.
+- A new menu item or toolbar button still needs a SketchUp restart.
+- Tip: give the command a key in **Window > Preferences > Shortcuts** (filter "Reload").
 
 ## Use the tool
 
