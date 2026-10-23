@@ -113,6 +113,7 @@ module OclJoints
       # SketchUp's Edit > Delete takes the Delete key before the tool when its selection is not
       # empty: clear it, so Delete erases the selected joint
       @model.selection.clear if @selected && !@model.selection.empty?
+      @copy = false unless @selected
       _status
       view.invalidate
     end
@@ -145,8 +146,10 @@ module OclJoints
       elsif key == KEY_ALT
         @alt = true
       elsif key == COPY_MODIFIER_KEY
-        _toggle_copy unless @ctrl_down || @first
+        # copy only for a selected joint
+        _toggle_copy if !@ctrl_down && @selected && @first.nil?
         @ctrl_down = true
+        handled = !@selected.nil?
       elsif ARROWS.include?(key)
         step = [ VK_RIGHT, VK_UP ].include?(key) ? 1 : -1
         horizontal = [ VK_LEFT, VK_RIGHT ].include?(key)
