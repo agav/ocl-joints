@@ -25,7 +25,6 @@ module OclJoints
     COLOR_SNAP_LINE = Sketchup::Color.new(120, 120, 120)
     LINE_WIDTH = 1
     GRIP_RADIUS = 4   # pixels
-    OWN_TOL = 0.5 / 25.4
     COLOR_GRIP = Sketchup::Color.new(148, 0, 211)   # violet
 
     KEY_BACKSPACE = 8
@@ -542,29 +541,14 @@ module OclJoints
       _status
     end
 
-    # Inference on the moving components themselves: not used, it would follow the joint.
-    # By entity (vertex, edge, face of the components) and by position: points such as a circle
-    # center have no entity of the component, so a point inside a component box is not used either.
+    # Inference on the moving components themselves: not used, it would follow the joint
     def _own_inference?
-      position = @ip.position
-      return true if @selected.parts.any? { |part| _world_bounds(part).contains?(position) }
       entity = @ip.vertex || @ip.edge || @ip.face
       return false if entity.nil?
       parent = entity.is_a?(Sketchup::Vertex) ? entity.edges.first&.parent : entity.parent
       return false unless parent.is_a?(Sketchup::ComponentDefinition)
       own = @selected.parts.flat_map { |part| _definitions(part.instance.definition) }
       own.include?(parent)
-    end
-
-    # World box of a placed component, a little larger (points on its surface are inside)
-    def _world_bounds(part)
-      t = part.transformation
-      local = part.instance.definition.bounds
-      box = Geom::BoundingBox.new
-      (0..7).each { |i| box.add(local.corner(i).transform(t)) }
-      grow = Geom::Vector3d.new(OWN_TOL, OWN_TOL, OWN_TOL)
-      box.add(box.min.offset(grow.reverse), box.max.offset(grow))
-      box
     end
 
     def _definitions(definition, found = [])
