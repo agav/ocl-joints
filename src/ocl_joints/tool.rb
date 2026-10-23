@@ -24,6 +24,7 @@ module OclJoints
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
     COLOR_SNAP_LINE = Sketchup::Color.new(120, 120, 120)
     LINE_WIDTH = 1
+    GRIP_RADIUS = 9   # pixels
 
     KEY_BACKSPACE = 8
     KEY_DELETE = 46
@@ -257,6 +258,7 @@ module OclJoints
       _draw_panel(view, @hover, PANEL_HOVER) if @hover && !_selected_panel?(@hover) && _clickable?(@hover)
       _draw_pair(view, @hover_pair, COLOR_CANDIDATE, LINE_WIDTH) if @hover_pair && @hover_pair != @selected
       _draw_pair(view, @selected, COLOR_PAIR, LINE_WIDTH) if @selected
+      _draw_grip(view) if @selected
       _draw_snap(view) if @drag
     end
 
@@ -724,6 +726,27 @@ module OclJoints
       view.line_width = width
       view.drawing_color = color
       view.draw2d(GL_LINES, points.map { |pt| view.screen_coords(pt.transform(transformation)) })
+    end
+
+    # Grip point of the selected joint (the point that snaps): a cross in a circle, larger while dragging
+    def _draw_grip(view)
+      point = if @drag
+                Geom::Point3d.new(*Joint.joint_point(@drag[:contact], @drag[:l]))
+              elsif @selected.edge.instance.valid?
+                @selected.edge.transformation.origin
+              end
+      return if point.nil?
+      c = view.screen_coords(point)
+      r = @drag ? GRIP_RADIUS : GRIP_RADIUS * 0.6
+      circle = (0..24).map { |i| a = i * Math::PI / 12; Geom::Point3d.new(c.x + r * Math.cos(a), c.y + r * Math.sin(a), 0) }
+      cross = [ [ -r, 0 ], [ r, 0 ], [ 0, -r ], [ 0, r ] ].map { |dx, dy| Geom::Point3d.new(c.x + dx, c.y + dy, 0) }
+      view.line_stipple = ''
+      [ [ 4, Sketchup::Color.new(255, 255, 255) ], [ 2, COLOR_PAIR ] ].each do |width, color|   # white outline, orange line
+        view.line_width = width
+        view.drawing_color = color
+        view.draw2d(GL_LINE_STRIP, circle)
+        view.draw2d(GL_LINES, cross)
+      end
     end
 
     # Inference marker and a dashed line from it to the joint
