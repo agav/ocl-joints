@@ -24,7 +24,8 @@ module OclJoints
     COLOR_PAIR = Sketchup::Color.new(255, 140, 0)
     COLOR_SNAP_LINE = Sketchup::Color.new(120, 120, 120)
     LINE_WIDTH = 1
-    GRIP_RADIUS = 9   # pixels
+    GRIP_RADIUS = 4   # pixels
+    COLOR_GRIP = Sketchup::Color.new(148, 0, 211)   # violet
 
     KEY_BACKSPACE = 8
     KEY_DELETE = 46
@@ -728,7 +729,7 @@ module OclJoints
       view.draw2d(GL_LINES, points.map { |pt| view.screen_coords(pt.transform(transformation)) })
     end
 
-    # Grip point of the selected joint (the point that snaps): a cross in a circle, larger while dragging
+    # Grip point of the selected joint (the point that snaps): a violet point with a white outline
     def _draw_grip(view)
       point = if @drag
                 Geom::Point3d.new(*Joint.joint_point(@drag[:contact], @drag[:l]))
@@ -737,15 +738,10 @@ module OclJoints
               end
       return if point.nil?
       c = view.screen_coords(point)
-      r = @drag ? GRIP_RADIUS : GRIP_RADIUS * 0.6
-      circle = (0..24).map { |i| a = i * Math::PI / 12; Geom::Point3d.new(c.x + r * Math.cos(a), c.y + r * Math.sin(a), 0) }
-      cross = [ [ -r, 0 ], [ r, 0 ], [ 0, -r ], [ 0, r ] ].map { |dx, dy| Geom::Point3d.new(c.x + dx, c.y + dy, 0) }
-      view.line_stipple = ''
-      [ [ 4, Sketchup::Color.new(255, 255, 255) ], [ 2, COLOR_PAIR ] ].each do |width, color|   # white outline, orange line
-        view.line_width = width
+      [ [ GRIP_RADIUS + 1.5, Sketchup::Color.new(255, 255, 255) ], [ GRIP_RADIUS, COLOR_GRIP ] ].each do |r, color|
+        disc = (0...20).map { |i| a = i * Math::PI / 10; Geom::Point3d.new(c.x + r * Math.cos(a), c.y + r * Math.sin(a), 0) }
         view.drawing_color = color
-        view.draw2d(GL_LINE_STRIP, circle)
-        view.draw2d(GL_LINES, cross)
+        view.draw2d(GL_POLYGON, disc)
       end
     end
 
